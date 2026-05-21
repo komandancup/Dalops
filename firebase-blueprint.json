@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "Employee": {
+      "title": "Employee",
+      "description": "Information about an outsource employee",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of employee" },
+        "name": { "type": "string", "description": "Full name of employee" },
+        "role": { "type": "string", "enum": ["Office Boy", "Security", "Driver", "Supervisor"], "description": "Worker role" },
+        "status": { "type": "string", "enum": ["Aktif", "Nonaktif"], "description": "Status of employment" },
+        "avatar": { "type": "string", "description": "Avatar URL or local representation" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "pin": { "type": "string", "description": "PIN code for login" }
+      },
+      "required": ["id", "name", "role", "status", "phone", "pin"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Daily attendance record with GPS coordinates and face selfie",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "employeeRole": { "type": "string" },
+        "date": { "type": "string" },
+        "checkInTime": { "type": "string" },
+        "checkOutTime": { "type": "string" },
+        "photoIn": { "type": "string" },
+        "photoOut": { "type": "string" },
+        "latIn": { "type": "number" },
+        "lngIn": { "type": "number" },
+        "latOut": { "type": "number" },
+        "lngOut": { "type": "number" },
+        "locationNameIn": { "type": "string" },
+        "locationNameOut": { "type": "string" },
+        "device": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "employeeName", "employeeRole", "date"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A task report submitted by outsource employee",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "employeeRole": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["Proses", "Menunggu Verifikasi", "Selesai"] },
+        "timestamp": { "type": "string" },
+        "date": { "type": "string" },
+        "proofPhoto": { "type": "string" },
+        "adminFeedback": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "employeeName", "employeeRole", "title", "status", "timestamp", "date"]
+    },
+    "JobDeskItem": {
+      "title": "JobDeskItem",
+      "description": "Standard Operating Procedure (SOP) item for an employment role",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "role": { "type": "string", "enum": ["Office Boy", "Security", "Driver", "Supervisor"] },
+        "taskTitle": { "type": "string" },
+        "description": { "type": "string" },
+        "schedule": { "type": "string" }
+      },
+      "required": ["id", "role", "taskTitle", "description", "schedule"]
+    }
+  },
+  "firestore": {
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Collection of outsource employees"
+    },
+    "/attendances/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Collection of daily attendance records"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Collection of task reports from outsourced employees"
+    },
+    "/jobDeskItems/{jobDeskId}": {
+      "schema": "JobDeskItem",
+      "description": "Collection of Master SOP guidelines per role"
+    }
+  }
+}

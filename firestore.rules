@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Catch-all default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // IsSignedIn helper
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Employess collection rules
+    match /employees/{employeeId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Attendances collection rules
+    match /attendances/{attendanceId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Tasks collection rules 
+    match /tasks/{taskId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // JobDeskItems collection rules
+    match /jobDeskItems/{jobDeskId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SiOps BPJS Ketenagakerjaan</string>
+    <string name="title_activity_main">SiOps BPJS Ketenagakerjaan</string>
+    <string name="package_name">com.siops.bpjskt</string>
+    <string name="custom_url_scheme">com.siops.bpjskt</string>
+</resources>

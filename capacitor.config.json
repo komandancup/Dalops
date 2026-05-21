@@ -1,0 +1,6 @@
+{
+  "appId": "com.siops.bpjskt",
+  "appName": "SiOps BPJS Ketenagakerjaan",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

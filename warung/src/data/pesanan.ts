@@ -34,7 +34,7 @@ export async function buatPesanan(
 
   const sesiRef = doc(db, 'sesiKas', sesiId);
   const ref = doc(collection(db, 'pesanan'));
-  await runTransaction(db, async (tx) => {
+  const { sesiTanggal, nomor } = await runTransaction(db, async (tx) => {
     const sesiSnap = await tx.get(sesiRef);
     if (!sesiSnap.exists()) throw new Error('Sesi kas tidak ditemukan.');
     const sesi = sesiSnap.data() as SesiKas;
@@ -49,8 +49,19 @@ export async function buatPesanan(
       dibatalkanOleh: null, dibatalkanPada: null, alasanBatal: null,
     });
     tx.update(sesiRef, { jumlahPesanan: nomor, pesananTerakhir: ref.id });
+    return { sesiTanggal: sesi.tanggal, nomor };
   });
-  return dariDoc<Pesanan>(await getDoc(ref));
+  // Built from what was written, not read back: a read after the commit can fail on a weak signal
+  // even though the order is saved, and the cashier would then enter it twice.
+  const sekarang = new Date();
+  return {
+    id: ref.id, sesiKasId: sesiId, tanggal: sesiTanggal, nomor, label: opsi.label, catatan: opsi.catatan,
+    item, total, status: bayar ? 'lunas' : 'belum_bayar',
+    caraBayar: bayar ? bayar.caraBayar : null, uangDiterima, jumlahCetak: 0,
+    dibuatOleh: pelaku, dibuatPada: sekarang,
+    dilunasiOleh: bayar ? pelaku : null, dilunasiPada: bayar ? sekarang : null,
+    dibatalkanOleh: null, dibatalkanPada: null, alasanBatal: null,
+  };
 }
 
 export async function lunasiPesanan(

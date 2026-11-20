@@ -9,12 +9,14 @@ import { batalkanPesanan, buatPesanan, catatCetak, lunasiPesanan } from '../../s
 import { batalkanPengeluaran, catatPengeluaran } from '../../src/data/pengeluaran';
 import { tambahKoreksi } from '../../src/data/koreksi';
 import { ambilPengaturan, simpanPengaturan } from '../../src/data/pengaturan';
+import { pantauMenu } from '../../src/data/menu';
 import { simpanMenu } from '../../src/data/menu';
 import { tanggalWIB } from '../../src/lib/tanggal';
 
 let env: RulesTestEnvironment;
 
 const OWNER = { uid: 'owner', nama: 'Pak Owner' };
+const EKS = { uid: 'eks', nama: 'Eks' };
 const BUDI = { uid: 'budi', nama: 'Budi' };
 
 /** Compat instance from rules-unit-testing; the modular API accepts it (it unwraps `_delegate`). */
@@ -49,6 +51,7 @@ beforeEach(async () => {
   await env.clearFirestore();
   await seed('users/owner', { nama: OWNER.nama, username: 'owner', peran: 'pemilik', aktif: true });
   await seed('users/budi', { nama: BUDI.nama, username: 'budi', peran: 'karyawan', aktif: true });
+  await seed('users/eks', { nama: EKS.nama, username: 'eks', peran: 'karyawan', aktif: false });
   await seed('pengaturan/sesiAktif', { sesiKasId: null, ditinggalTerakhir: 100000 });
   for (const m of [LELE, AYAM, TEH]) {
     const { id, ...rest } = m;
@@ -197,5 +200,39 @@ describe('alur shift', () => {
     await tutupSesi(d, BUDI, sesi.id, { tunaiDihitung: 100000, qrisMerchant: 0, disetor: 50000, ditinggal: 50000, catatan: '' });
     await vi.waitFor(() => expect(dilihat.at(-1)).toBe(null));
     lepas();
+  });
+
+  it('pantauMenu reports errors (inactive user) through onError', async () => {
+    const cb = vi.fn();
+    const onError = vi.fn();
+    const lepas = pantauMenu(db('eks'), cb, onError);
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(cb).not.toHaveBeenCalled();
+    lepas();
+  });
+
+  it('tutupSesi refuses when the queried orders do not match the session count', async () => {
+    const d = db('budi');
+    const sesi = await bukaSesi(d, BUDI, 100000, null);
+    // Simulates an order created by another device after the query: the counter is ahead of the list.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore() as unknown as Firestore, 'sesiKas', sesi.id), { jumlahPesanan: 1 }, { merge: true });
+    });
+    await expect(tutupSesi(d, BUDI, sesi.id, {
+      tunaiDihitung: 100000, qrisMerchant: 0, disetor: 50000, ditinggal: 50000, catatan: '',
+    })).rejects.toThrow('Ada pesanan baru masuk. Coba tutup kas lagi.');
+    expect((await getDoc(doc(d, 'sesiKas', sesi.id))).data()?.status).toBe('buka');
+  });
+
+  it('lunasiPesanan refuses tunai below total; buatPesanan refuses non-integer jumlah', async () => {
+    const d = db('budi');
+    const sesi = await bukaSesi(d, BUDI, 100000, null);
+    const p = await buatPesanan(d, BUDI, sesi.id, [{ menu: LELE, jumlah: 1 }], { label: '', catatan: '', bayar: null });
+    await expect(lunasiPesanan(d, BUDI, p.id, 'tunai', 20000)).rejects.toThrow('Uang diterima kurang dari total.');
+    for (const jumlah of [0, -1, 1.5]) {
+      await expect(buatPesanan(d, BUDI, sesi.id, [{ menu: LELE, jumlah }], { label: '', catatan: '', bayar: null }))
+        .rejects.toThrow('Jumlah porsi harus angka bulat lebih dari 0.');
+    }
   });
 });

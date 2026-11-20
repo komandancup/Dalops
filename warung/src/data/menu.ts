@@ -3,10 +3,10 @@ import type { Menu } from '../types';
 import { dariDoc } from './konversi';
 
 /** All menu items (active and inactive), sorted by `urutan`. */
-export function pantauMenu(db: Firestore, cb: (menu: Menu[]) => void): Unsubscribe {
+export function pantauMenu(db: Firestore, cb: (menu: Menu[]) => void, onError?: (e: Error) => void): Unsubscribe {
   return onSnapshot(collection(db, 'menu'), (snap) => {
     cb(snap.docs.map((d) => dariDoc<Menu>(d)).sort((a, b) => a.urutan - b.urutan));
-  });
+  }, onError);
 }
 
 /** Creates (no id) or overwrites (with id) a menu item. Menu is never deleted, only set `aktif: false`. */

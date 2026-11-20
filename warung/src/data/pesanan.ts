@@ -23,9 +23,10 @@ export async function buatPesanan(
   keranjang: { menu: Menu; jumlah: number }[],
   opsi: { label: string; catatan: string; bayar: { caraBayar: CaraBayar; uangDiterima: number | null } | null },
 ): Promise<Pesanan> {
-  const item: ItemPesanan[] = keranjang
-    .filter((k) => k.jumlah > 0)
-    .map((k) => ({ menuId: k.menu.id, nama: k.menu.nama, harga: k.menu.harga, jumlah: k.jumlah }));
+  if (keranjang.some((k) => !Number.isInteger(k.jumlah) || k.jumlah <= 0)) {
+    throw new Error('Jumlah porsi harus angka bulat lebih dari 0.');
+  }
+  const item: ItemPesanan[] = keranjang.map((k) => ({ menuId: k.menu.id, nama: k.menu.nama, harga: k.menu.harga, jumlah: k.jumlah }));
   if (item.length === 0) throw new Error('Pesanan masih kosong.');
   const total = hitungTotal(item);
   const { bayar } = opsi;
@@ -55,8 +56,15 @@ export async function buatPesanan(
 export async function lunasiPesanan(
   db: Firestore, pelaku: Pelaku, id: string, caraBayar: CaraBayar, uangDiterima: number | null,
 ): Promise<void> {
-  await updateDoc(doc(db, 'pesanan', id), {
-    status: 'lunas', caraBayar, uangDiterima: cekBayar(caraBayar, uangDiterima, null),
+  const ref = doc(db, 'pesanan', id);
+  let total: number | null = null;
+  if (caraBayar === 'tunai' && uangDiterima !== null) {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error('Pesanan tidak ditemukan.');
+    total = (snap.data() as Pesanan).total;
+  }
+  await updateDoc(ref, {
+    status: 'lunas', caraBayar, uangDiterima: cekBayar(caraBayar, uangDiterima, total),
     dilunasiOleh: pelaku, dilunasiPada: serverTimestamp(),
   });
 }
@@ -74,8 +82,10 @@ export async function catatCetak(db: Firestore, id: string): Promise<void> {
 }
 
 /** Orders of one session, sorted by nomor (sorted here to avoid needing a composite index). */
-export function pantauPesananSesi(db: Firestore, sesiId: string, cb: (p: Pesanan[]) => void): Unsubscribe {
+export function pantauPesananSesi(
+  db: Firestore, sesiId: string, cb: (p: Pesanan[]) => void, onError?: (e: Error) => void,
+): Unsubscribe {
   return onSnapshot(query(collection(db, 'pesanan'), where('sesiKasId', '==', sesiId)), (snap) => {
     cb(snap.docs.map((d) => dariDoc<Pesanan>(d)).sort((a, b) => a.nomor - b.nomor));
-  });
+  }, onError);
 }

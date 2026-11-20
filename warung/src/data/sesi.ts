@@ -50,7 +50,9 @@ export async function ambilSesiAktif(db: Firestore): Promise<{ aktif: SesiKas | 
 }
 
 /** Follows the open session (null when none). Re-subscribes when the marker moves. */
-export function pantauSesiAktif(db: Firestore, cb: (s: SesiKas | null) => void): Unsubscribe {
+export function pantauSesiAktif(
+  db: Firestore, cb: (s: SesiKas | null) => void, onError?: (e: Error) => void,
+): Unsubscribe {
   let lepasSesi: Unsubscribe | null = null;
   let idSekarang: string | null | undefined; // undefined = no marker snapshot yet
   const lepasPenanda = onSnapshot(sesiAktifRef(db), (snap) => {
@@ -63,8 +65,8 @@ export function pantauSesiAktif(db: Firestore, cb: (s: SesiKas | null) => void):
       cb(null);
       return;
     }
-    lepasSesi = onSnapshot(sesiRef(db, id), (s) => cb(s.exists() ? dariDoc<SesiKas>(s) : null));
-  });
+    lepasSesi = onSnapshot(sesiRef(db, id), (s) => cb(s.exists() ? dariDoc<SesiKas>(s) : null), onError);
+  }, onError);
   return () => {
     lepasPenanda();
     lepasSesi?.();
@@ -92,6 +94,12 @@ export async function tutupSesi(
     if (!sesiSnap.exists()) throw new Error('Sesi kas tidak ditemukan.');
     const sesi = dariDoc<SesiKas>(sesiSnap);
     if (sesi.status !== 'buka' || penanda?.sesiKasId !== sesiId) throw new Error('Sesi kas ini sudah ditutup.');
+
+    // The order list was queried before the transaction. If another device created an order since,
+    // the session counter (re-read here, so a concurrent bump retries this check) no longer matches.
+    // Known R1 gap: a late lunasi/batal or a new pengeluaran does not touch the sesi doc, so it is not
+    // detected here; the rules still recheck the close arithmetic but not the sums themselves.
+    if (pesanan.length !== sesi.jumlahPesanan) throw new Error('Ada pesanan baru masuk. Coba tutup kas lagi.');
 
     const ringkasan = ringkasSesi(sesi, pesanan, pengeluaran);
     const kesalahan = validasiTutup({ ringkasan, ...data });

@@ -1,0 +1,323 @@
+rules_version = '2';
+
+// Aturan keamanan warung: inti "angka bisa dipercaya".
+// - Tidak ada yang bisa menghapus pesanan, pengeluaran, sesiKas, koreksi (termasuk pemilik).
+// - Pesanan & pengeluaran hanya dibuat di sesi `buka`, atas nama akun sendiri.
+// - Pesanan hanya boleh: belum_bayar -> lunas, belum_bayar|lunas -> batal (alasan wajib),
+//   dan jumlahCetak +1. Item/total/harga tidak pernah berubah.
+// - Sesi `tutup` terkunci. Hanya satu sesi `buka` (penanda pengaturan/sesiAktif).
+// - Akun aktif = false tidak bisa membaca/menulis apa pun.
+//
+// Kontrak batch (lihat juga src/data/*):
+// - Buka kas: create sesiKas/{id} (status buka, jumlahPesanan 0) + update sesiAktif.sesiKasId null -> {id}.
+// - Pesanan baru: create pesanan/{id} (nomor = jumlahPesanan + 1) + update sesiKas jumlahPesanan +1.
+// - Tutup kas: sesiKas buka -> tutup + sesiAktif = { sesiKasId: null, ditinggalTerakhir: ditinggal }.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function docPath(koleksi, id) {
+      return /databases/$(database)/documents/$(koleksi)/$(id);
+    }
+    function masuk() {
+      return request.auth != null;
+    }
+    function pengguna() {
+      return get(docPath('users', request.auth.uid));
+    }
+    function aktif() {
+      return masuk() && exists(docPath('users', request.auth.uid)) && pengguna().data.aktif == true;
+    }
+    function pemilik() {
+      return aktif() && pengguna().data.peran == 'pemilik';
+    }
+    // Pelaku harus akun yang sedang masuk, dengan nama yang tersimpan di users/{uid}.
+    function pelakuSaya(p) {
+      return p is map
+        && p.keys().hasAll(['uid', 'nama']) && p.keys().hasOnly(['uid', 'nama'])
+        && p.uid == request.auth.uid
+        && p.nama == pengguna().data.nama;
+    }
+    function kunciPersis(d, kunci) {
+      return d.keys().hasAll(kunci) && d.keys().hasOnly(kunci);
+    }
+    function hanyaUbah(kunci) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(kunci);
+    }
+    function teksWajib(s) {
+      return s is string && s.trim().size() > 0;
+    }
+    function rupiah(n) {
+      return n is int;
+    }
+    function rupiahPositif(n) {
+      return n is int && n > 0;
+    }
+    function tanggalValid(t) {
+      return t is string && t.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+    function sesi(id) {
+      return get(docPath('sesiKas', id));
+    }
+    function sesiBuka(id) {
+      return id is string && exists(docPath('sesiKas', id)) && sesi(id).data.status == 'buka';
+    }
+    function sesiAktifPath() {
+      return docPath('pengaturan', 'sesiAktif');
+    }
+    function batalValid(d) {
+      return d.status == 'batal'
+        && teksWajib(d.alasanBatal)
+        && pelakuSaya(d.dibatalkanOleh)
+        && d.dibatalkanPada == request.time;
+    }
+
+    // ---------- users ----------
+    match /users/{uid} {
+      allow read: if aktif() && (request.auth.uid == uid || pemilik());
+      allow create, update: if pemilik()
+        && kunciPersis(request.resource.data, ['nama', 'username', 'peran', 'aktif'])
+        && teksWajib(request.resource.data.nama)
+        && request.resource.data.username is string
+        && request.resource.data.peran in ['pemilik', 'karyawan']
+        && request.resource.data.aktif is bool;
+      allow delete: if false;
+    }
+
+    // ---------- menu (tidak dihapus, hanya dinonaktifkan) ----------
+    match /menu/{id} {
+      allow read: if aktif();
+      allow create, update: if pemilik()
+        && kunciPersis(request.resource.data, ['nama', 'harga', 'kategori', 'aktif', 'urutan'])
+        && teksWajib(request.resource.data.nama)
+        && rupiahPositif(request.resource.data.harga)
+        && request.resource.data.kategori in ['Makanan', 'Nasi & Tambahan', 'Minuman']
+        && request.resource.data.aktif is bool
+        && request.resource.data.urutan is int;
+      allow delete: if false;
+    }
+
+    // ---------- pengaturan ----------
+    match /pengaturan/warung {
+      allow read: if aktif();
+      allow create, update: if pemilik()
+        && kunciPersis(request.resource.data, ['namaWarung', 'qrisStatis', 'namaMerchant'])
+        && request.resource.data.namaWarung is string
+        && (request.resource.data.qrisStatis == null || request.resource.data.qrisStatis is string)
+        && (request.resource.data.namaMerchant == null || request.resource.data.namaMerchant is string);
+      allow delete: if false;
+    }
+
+    match /pengaturan/sesiAktif {
+      allow read: if aktif();
+      // Disiapkan sekali oleh pemilik saat setup.
+      allow create: if pemilik()
+        && kunciPersis(request.resource.data, ['sesiKasId', 'ditinggalTerakhir'])
+        && request.resource.data.sesiKasId == null
+        && request.resource.data.ditinggalTerakhir is int
+        && request.resource.data.ditinggalTerakhir >= 0;
+      // Hanya dua transisi, keduanya dalam batch bersama sesiKas.
+      allow update: if aktif()
+        && kunciPersis(request.resource.data, ['sesiKasId', 'ditinggalTerakhir'])
+        && (bukaPenanda() || tutupPenanda());
+      allow delete: if false;
+
+      // null -> {id}: sesi {id} baru dibuat di batch yang sama dengan status buka.
+      function bukaPenanda() {
+        let baru = request.resource.data.sesiKasId;
+        return resource.data.sesiKasId == null
+          && baru is string
+          && hanyaUbah(['sesiKasId'])
+          && !exists(docPath('sesiKas', baru))
+          && getAfter(docPath('sesiKas', baru)).data.status == 'buka';
+      }
+      // {id} -> null: sesi {id} berubah buka -> tutup di batch yang sama.
+      function tutupPenanda() {
+        let lama = resource.data.sesiKasId;
+        let sesiSesudah = getAfter(docPath('sesiKas', lama)).data;
+        return lama is string
+          && request.resource.data.sesiKasId == null
+          && sesi(lama).data.status == 'buka'
+          && sesiSesudah.status == 'tutup'
+          && request.resource.data.ditinggalTerakhir == sesiSesudah.ditinggal;
+      }
+    }
+
+    // ---------- sesiKas ----------
+    match /sesiKas/{id} {
+      allow read: if aktif();
+      allow create: if aktif() && sesiBaruValid();
+      allow update: if aktif()
+        && resource.data.status == 'buka'
+        && (tambahNomor() || tutupSesi());
+      allow delete: if false;
+
+      function sesiBaruValid() {
+        let d = request.resource.data;
+        let penanda = get(sesiAktifPath()).data;
+        return kunciPersis(d, ['tanggal', 'status', 'jumlahPesanan', 'dibukaOleh', 'dibukaPada',
+            'modalAwal', 'modalSaran', 'alasanUbahModal', 'ditutupOleh', 'ditutupPada',
+            'tunaiSeharusnya', 'tunaiDihitung', 'selisihTunai', 'qrisAplikasi', 'qrisMerchant',
+            'selisihQris', 'disetor', 'ditinggal', 'catatan'])
+          && tanggalValid(d.tanggal)
+          && d.status == 'buka'
+          && d.jumlahPesanan == 0
+          && pelakuSaya(d.dibukaOleh)
+          && d.dibukaPada == request.time
+          && rupiah(d.modalAwal) && d.modalAwal >= 0
+          && d.modalSaran == penanda.ditinggalTerakhir
+          && (d.modalAwal == d.modalSaran ? d.alasanUbahModal == null : teksWajib(d.alasanUbahModal))
+          && d.ditutupOleh == null && d.ditutupPada == null
+          && d.tunaiSeharusnya == null && d.tunaiDihitung == null && d.selisihTunai == null
+          && d.qrisAplikasi == null && d.qrisMerchant == null && d.selisihQris == null
+          && d.disetor == null && d.ditinggal == null && d.catatan == null
+          // Hanya satu sesi buka: penanda harus kosong sebelum, dan menunjuk sesi ini sesudah.
+          && penanda.sesiKasId == null
+          && getAfter(sesiAktifPath()).data.sesiKasId == id;
+      }
+
+      // Bagian dari batch pesanan baru.
+      function tambahNomor() {
+        return hanyaUbah(['jumlahPesanan'])
+          && request.resource.data.jumlahPesanan == resource.data.jumlahPesanan + 1;
+      }
+
+      function tutupSesi() {
+        let d = request.resource.data;
+        let penandaSesudah = getAfter(sesiAktifPath()).data;
+        return hanyaUbah(['status', 'ditutupOleh', 'ditutupPada', 'tunaiSeharusnya', 'tunaiDihitung',
+            'selisihTunai', 'qrisAplikasi', 'qrisMerchant', 'selisihQris', 'disetor', 'ditinggal', 'catatan'])
+          && d.status == 'tutup'
+          && pelakuSaya(d.ditutupOleh)
+          && d.ditutupPada == request.time
+          && rupiah(d.tunaiSeharusnya)
+          && rupiah(d.tunaiDihitung) && d.tunaiDihitung >= 0
+          && rupiah(d.qrisAplikasi) && d.qrisAplikasi >= 0
+          && rupiah(d.qrisMerchant) && d.qrisMerchant >= 0
+          && d.selisihTunai == d.tunaiDihitung - d.tunaiSeharusnya
+          && d.selisihQris == d.qrisMerchant - d.qrisAplikasi
+          && rupiah(d.disetor) && d.disetor >= 0
+          && rupiah(d.ditinggal) && d.ditinggal >= 0
+          && d.disetor + d.ditinggal == d.tunaiDihitung
+          && (d.catatan == null || d.catatan is string)
+          && ((d.selisihTunai == 0 && d.selisihQris == 0) || teksWajib(d.catatan))
+          && penandaSesudah.sesiKasId == null
+          && penandaSesudah.ditinggalTerakhir == d.ditinggal;
+      }
+    }
+
+    // ---------- pesanan ----------
+    match /pesanan/{id} {
+      allow read: if aktif();
+      allow create: if aktif() && pesananBaruValid();
+      allow update: if aktif() && (lunasi() || batalkan() || cetak());
+      allow delete: if false;
+
+      function lunasValid(d) {
+        return d.status == 'lunas'
+          && d.caraBayar in ['tunai', 'qris']
+          && (d.uangDiterima == null || (d.uangDiterima is int && d.uangDiterima >= d.total))
+          && pelakuSaya(d.dilunasiOleh)
+          && d.dilunasiPada == request.time;
+      }
+
+      function pesananBaruValid() {
+        let d = request.resource.data;
+        let sebelum = sesi(d.sesiKasId).data;
+        let sesudah = getAfter(docPath('sesiKas', d.sesiKasId)).data;
+        return kunciPersis(d, ['sesiKasId', 'tanggal', 'nomor', 'label', 'catatan', 'item', 'total',
+            'status', 'caraBayar', 'uangDiterima', 'jumlahCetak', 'dibuatOleh', 'dibuatPada',
+            'dilunasiOleh', 'dilunasiPada', 'dibatalkanOleh', 'dibatalkanPada', 'alasanBatal'])
+          && sesiBuka(d.sesiKasId)
+          // Nomor urut: penghitung sesi naik 1 di batch yang sama.
+          && sesudah.jumlahPesanan == sebelum.jumlahPesanan + 1
+          && d.nomor == sesudah.jumlahPesanan
+          && d.tanggal == sebelum.tanggal
+          && d.label is string
+          && d.catatan is string
+          && d.item is list && d.item.size() > 0 && d.item.size() <= 50
+          && rupiahPositif(d.total)
+          && d.jumlahCetak == 0
+          && pelakuSaya(d.dibuatOleh)
+          && d.dibuatPada == request.time
+          && d.dibatalkanOleh == null && d.dibatalkanPada == null && d.alasanBatal == null
+          && ((d.status == 'belum_bayar' && d.caraBayar == null && d.uangDiterima == null
+                && d.dilunasiOleh == null && d.dilunasiPada == null)
+              || lunasValid(d));
+      }
+
+      // belum_bayar -> lunas, hanya saat sesinya masih buka.
+      function lunasi() {
+        return resource.data.status == 'belum_bayar'
+          && hanyaUbah(['status', 'caraBayar', 'uangDiterima', 'dilunasiOleh', 'dilunasiPada'])
+          && lunasValid(request.resource.data)
+          && sesiBuka(resource.data.sesiKasId);
+      }
+
+      // belum_bayar|lunas -> batal. Karyawan saat sesi buka; pemilik kapan saja.
+      function batalkan() {
+        return resource.data.status in ['belum_bayar', 'lunas']
+          && hanyaUbah(['status', 'alasanBatal', 'dibatalkanOleh', 'dibatalkanPada'])
+          && batalValid(request.resource.data)
+          && (pemilik() || sesiBuka(resource.data.sesiKasId));
+      }
+
+      // Cetak struk: hanya pesanan lunas, jumlahCetak tepat +1.
+      function cetak() {
+        return resource.data.status == 'lunas'
+          && hanyaUbah(['jumlahCetak'])
+          && request.resource.data.jumlahCetak == resource.data.jumlahCetak + 1;
+      }
+    }
+
+    // ---------- pengeluaran ----------
+    match /pengeluaran/{id} {
+      allow read: if aktif();
+      allow create: if aktif() && pengeluaranBaruValid();
+      allow update: if aktif()
+        && resource.data.status == 'aktif'
+        && hanyaUbah(['status', 'alasanBatal', 'dibatalkanOleh', 'dibatalkanPada'])
+        && batalValid(request.resource.data)
+        && (pemilik() || sesiBuka(resource.data.sesiKasId));
+      allow delete: if false;
+
+      function pengeluaranBaruValid() {
+        let d = request.resource.data;
+        return kunciPersis(d, ['sesiKasId', 'tanggal', 'kategori', 'keterangan', 'nominal', 'dariLaci',
+            'status', 'dibuatOleh', 'dibuatPada', 'dibatalkanOleh', 'dibatalkanPada', 'alasanBatal'])
+          && d.kategori in ['Bahan baku', 'Minyak', 'Gas', 'Beras', 'Kemasan', 'Operasional lain']
+          && d.keterangan is string
+          && rupiahPositif(d.nominal)
+          && d.dariLaci is bool
+          && d.status == 'aktif'
+          && pelakuSaya(d.dibuatOleh)
+          && d.dibuatPada == request.time
+          && d.dibatalkanOleh == null && d.dibatalkanPada == null && d.alasanBatal == null
+          && (
+            // Pengeluaran di luar sesi: hanya pemilik.
+            (d.sesiKasId == null && pemilik() && tanggalValid(d.tanggal))
+            || (sesiBuka(d.sesiKasId) && d.tanggal == sesi(d.sesiKasId).data.tanggal)
+          );
+      }
+    }
+
+    // ---------- koreksi (pemilik, tambah saja) ----------
+    match /koreksi/{id} {
+      allow read: if aktif();
+      allow create: if pemilik() && koreksiValid();
+      allow update, delete: if false;
+
+      function koreksiValid() {
+        let d = request.resource.data;
+        return kunciPersis(d, ['sesiKasId', 'tanggal', 'nominal', 'catatan', 'dibuatOleh', 'dibuatPada'])
+          && d.sesiKasId is string
+          && exists(docPath('sesiKas', d.sesiKasId))
+          && d.tanggal == sesi(d.sesiKasId).data.tanggal
+          && rupiah(d.nominal)
+          && teksWajib(d.catatan)
+          && pelakuSaya(d.dibuatOleh)
+          && d.dibuatPada == request.time;
+      }
+    }
+  }
+}

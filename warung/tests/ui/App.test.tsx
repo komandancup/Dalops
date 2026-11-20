@@ -55,4 +55,13 @@ describe('App', () => {
     act(() => terakhir().cb(null)); // the sign-out itself fires a plain null afterwards
     expect(screen.getByText('Akun ini sudah dinonaktifkan. Hubungi pemilik.')).toBeTruthy();
   });
+
+  it('opens Printer settings from the gear icon for an employee', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    act(() => terakhir().cb({ uid: 'u1', nama: 'Sari', username: 'sari', peran: 'karyawan', aktif: true }));
+    await user.click(screen.getByRole('button', { name: 'Pengaturan Printer' }));
+    expect(screen.getByRole('heading', { name: 'Printer Struk' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pengaturan Printer' }).getAttribute('aria-current')).toBe('page');
+  });
 });

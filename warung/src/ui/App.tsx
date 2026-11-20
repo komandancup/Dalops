@@ -11,6 +11,7 @@ import Kasir from './Kasir';
 import Kerangka, { tabAwal, type Tab } from './Kerangka';
 import Masuk from './Masuk';
 import Pengeluaran from './Pengeluaran';
+import PengaturanPrinter from './PengaturanPrinter';
 import Beranda from './pemilik/Beranda';
 import Lainnya, { type Tujuan } from './pemilik/Lainnya';
 import { LayarGalat, LayarMemuat } from './Status';
@@ -72,10 +73,11 @@ function Utama({ pengguna }: { pengguna: Pengguna }) {
   };
 
   // Kasir stays mounted while other tabs are shown so a half-built cart survives a tab switch.
-  const kasir = isiSesi((s) => (s ? <Kasir key={s.id} pengguna={pengguna} sesi={s} /> : <BukaKas pengguna={pengguna} />));
+  const kasir = isiSesi((s) => (s ? <Kasir key={s.id} pengguna={pengguna} sesi={s} namaWarung={namaWarung} /> : <BukaKas pengguna={pengguna} />));
   let lain: ReactNode = null;
   if (tab === 'pesanan') lain = isiSesi((s) => <DaftarPesanan pengguna={pengguna} sesi={s} namaWarung={namaWarung} />);
   else if (tab === 'pengeluaran') lain = isiSesi((s) => <Pengeluaran pengguna={pengguna} sesi={s} />);
+  else if (tab === 'printer') lain = <PengaturanPrinter namaWarung={namaWarung} />;
   else if (tab === 'tutup') lain = isiSesi((s) => <TutupKas pengguna={pengguna} sesi={s} />);
   else if (tab === 'beranda') {
     lain = isiSesi((s) => (

@@ -7,3 +7,7 @@ firestore-debug.log
 ui-debug.log
 test-results
 playwright-report
+
+# Firebase service account keys (never commit)
+kunci*.json
+*firebase-adminsdk*.json

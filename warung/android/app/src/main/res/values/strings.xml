@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Warung</string>
+    <string name="title_activity_main">Warung</string>
+    <string name="package_name">id.warung.pecellele</string>
+    <string name="custom_url_scheme">id.warung.pecellele</string>
+</resources>

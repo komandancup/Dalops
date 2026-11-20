@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { ClipboardList, Home, LogOut, Menu as IkonMenu, ShoppingCart, Vault, Wallet, type LucideIcon } from 'lucide-react';
+import { ClipboardList, Home, LogOut, Menu as IkonMenu, Settings, ShoppingCart, Vault, Wallet, type LucideIcon } from 'lucide-react';
 import type { Peran, Pengguna } from '../types';
 
-export type Tab = 'beranda' | 'kasir' | 'pesanan' | 'pengeluaran' | 'tutup' | 'lainnya';
+/** 'printer' has no bottom-nav button: it opens from the gear icon in the header. */
+export type Tab = 'beranda' | 'kasir' | 'pesanan' | 'pengeluaran' | 'tutup' | 'lainnya' | 'printer';
 
 // Owner: 5 tabs (Pengeluaran lives in Lainnya) so every label fits at 360px. Karyawan: 4 tabs.
 const TAB: { id: Tab; teks: string; Ikon: LucideIcon; untuk?: Peran }[] = [
@@ -35,9 +36,16 @@ export default function Kerangka({ namaWarung, pengguna, tab, onTab, onKeluar, c
           <p className="truncate text-lg font-bold leading-tight">{namaWarung}</p>
           <p className="truncate text-sm text-stone-300">{pengguna.nama}</p>
         </div>
-        <button type="button" onClick={onKeluar} className="flex min-h-12 items-center gap-1 rounded-xl px-3 text-base active:bg-stone-700">
-          <LogOut aria-hidden className="size-5" /> Keluar
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" onClick={() => onTab('printer')} aria-label="Pengaturan Printer" title="Pengaturan Printer"
+            aria-current={tab === 'printer' ? 'page' : undefined}
+            className={`flex size-12 items-center justify-center rounded-xl active:bg-stone-700 ${tab === 'printer' ? 'bg-stone-700' : ''}`}>
+            <Settings aria-hidden className="size-6" />
+          </button>
+          <button type="button" onClick={onKeluar} className="flex min-h-12 items-center gap-1 rounded-xl px-3 text-base active:bg-stone-700">
+            <LogOut aria-hidden className="size-5" /> Keluar
+          </button>
+        </div>
       </header>
       <main className="flex-1 overflow-y-auto">{children}</main>
       <nav className="flex border-t border-stone-300 bg-white">

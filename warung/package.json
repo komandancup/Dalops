@@ -13,6 +13,7 @@
     "e2e": "firebase emulators:exec --only auth,firestore \"tsx scripts/seed-emulator.ts && playwright test tests/e2e --trace off\""
   },
   "dependencies": {
+    "@ascentio-it/capacitor-bluetooth-serial": "^8.0.1",
     "@capacitor/android": "^8.3.4",
     "@capacitor/core": "^8.3.4",
     "@tailwindcss/vite": "^4.1.14",

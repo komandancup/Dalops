@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { db } from '../firebase';
 import { batalkanPesanan, lunasiPesanan, pantauPesananSesi } from '../data/pesanan';
 import { formatRupiah } from '../lib/uang';
-import { bolehCetak, cetakPesanan } from '../printer/printer';
+import { bolehCetak, cetakOtomatis, cetakPesanan } from '../printer/printer';
 import type { Pengguna, Pesanan, SesiKas, StatusPesanan } from '../types';
 import Bayar from './Bayar';
 import Batalkan from './Batalkan';
@@ -47,12 +47,13 @@ function Daftar({ pengguna, sesi, namaWarung }: Props & { sesi: SesiKas }) {
     setGalat(g);
   };
 
-  async function cetak(p: Pesanan) {
-    lapor(null, null);
+  /** `kabarTetap` keeps a success message (e.g. "lunas") visible next to a printer error. */
+  async function cetak(p: Pesanan, kabarTetap: string | null = null) {
+    lapor(kabarTetap, null);
     try {
       await cetakPesanan(p, namaWarung);
     } catch (e) {
-      lapor(null, pesanGalat(e));
+      lapor(kabarTetap, pesanGalat(e));
     }
   }
 
@@ -117,7 +118,16 @@ function Daftar({ pengguna, sesi, namaWarung }: Props & { sesi: SesiKas }) {
           onBayar={async (b) => {
             await lunasiPesanan(db, pelaku, bayar.id, b.caraBayar, b.uangDiterima);
             setBayar(null);
-            lapor(`Pesanan #${bayar.nomor} lunas.`, null);
+            const kabarLunas = `Pesanan #${bayar.nomor} lunas.`;
+            lapor(kabarLunas, null);
+            // Already saved: a printer failure only shows its error, it never undoes the payment.
+            if (cetakOtomatis()) {
+              const lunas: Pesanan = {
+                ...bayar, status: 'lunas', caraBayar: b.caraBayar, uangDiterima: b.uangDiterima,
+                dilunasiOleh: pelaku, dilunasiPada: new Date(),
+              };
+              void cetak(lunas, kabarLunas);
+            }
           }}
           onTutup={() => setBayar(null)}
         />

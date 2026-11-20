@@ -7,6 +7,8 @@ import type { Menu, Pengguna, SesiKas } from '../../src/types';
 const m = vi.hoisted(() => ({
   buatPesanan: vi.fn(),
   ambilPengaturan: vi.fn(),
+  cetakPesanan: vi.fn(),
+  otomatis: false,
 }));
 vi.mock('../../src/firebase', () => ({ db: {}, auth: {} }));
 vi.mock('../../src/data/menu', () => ({
@@ -17,6 +19,7 @@ vi.mock('../../src/data/menu', () => ({
 }));
 vi.mock('../../src/data/pesanan', () => ({ buatPesanan: m.buatPesanan }));
 vi.mock('../../src/data/pengaturan', () => ({ ambilPengaturan: m.ambilPengaturan }));
+vi.mock('../../src/printer/printer', () => ({ cetakPesanan: m.cetakPesanan, cetakOtomatis: () => m.otomatis }));
 
 import Kasir from '../../src/ui/Kasir';
 
@@ -32,13 +35,15 @@ const sesi = { id: 's1', status: 'buka', tanggal: '2026-11-20' } as SesiKas;
 beforeEach(() => {
   m.buatPesanan.mockReset();
   m.ambilPengaturan.mockReset();
+  m.cetakPesanan.mockReset().mockResolvedValue(undefined);
+  m.otomatis = false;
   m.ambilPengaturan.mockResolvedValue({ namaWarung: 'Warung', qrisStatis: null, namaMerchant: null });
 });
 afterEach(cleanup);
 
 async function isiKeranjang() {
   const user = userEvent.setup();
-  render(<Kasir pengguna={pengguna} sesi={sesi} />);
+  render(<Kasir pengguna={pengguna} sesi={sesi} namaWarung="Warung Lele" />);
   await user.click(screen.getByRole('button', { name: /Pecel Lele/ }));
   await user.click(screen.getByRole('button', { name: /Pecel Lele/ }));
   await user.click(screen.getByRole('button', { name: /Es Teh/ }));
@@ -53,7 +58,7 @@ async function bukaBayarTunai(user: ReturnType<typeof userEvent.setup>) {
 
 describe('Kasir', () => {
   it('shows only active menu items', () => {
-    render(<Kasir pengguna={pengguna} sesi={sesi} />);
+    render(<Kasir pengguna={pengguna} sesi={sesi} namaWarung="Warung Lele" />);
     expect(screen.queryByRole('button', { name: /Pecel Ayam/ })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Minuman' })).toBeTruthy();
   });
@@ -148,5 +153,44 @@ describe('Kasir', () => {
     expect(await screen.findByText('QRIS warung belum diatur. Minta pemilik mengisi di Pengaturan.')).toBeTruthy();
     const layar = screen.getByRole('dialog', { name: /QRIS/ });
     expect(within(layar).getByRole('button', { name: 'Ganti ke tunai' })).toBeTruthy();
+  });
+
+  it('prints the receipt right after Simpan Lunas when automatic printing is on', async () => {
+    m.otomatis = true;
+    const lunas = { id: 'p1', nomor: 5, status: 'lunas' };
+    m.buatPesanan.mockResolvedValue(lunas);
+    const user = await isiKeranjang();
+    await bukaBayarTunai(user);
+    await user.click(screen.getByRole('button', { name: 'Simpan Lunas' }));
+    expect(await screen.findByText('Pesanan #5 tersimpan, lunas.')).toBeTruthy();
+    expect(m.cetakPesanan).toHaveBeenCalledWith(lunas, 'Warung Lele');
+  });
+
+  it('a printer failure after Simpan Lunas keeps the saved order and only shows the printer error', async () => {
+    m.otomatis = true;
+    m.buatPesanan.mockResolvedValue({ id: 'p1', nomor: 5, status: 'lunas' });
+    m.cetakPesanan.mockRejectedValue(new Error('Printer tidak tersambung. Cek Bluetooth dan printer.'));
+    const user = await isiKeranjang();
+    await bukaBayarTunai(user);
+    await user.click(screen.getByRole('button', { name: 'Simpan Lunas' }));
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Printer tidak tersambung. Cek Bluetooth dan printer.');
+    expect(screen.getByText('Pesanan #5 tersimpan, lunas.')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(m.buatPesanan).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not print automatically when the setting is off or the order is unpaid', async () => {
+    m.buatPesanan.mockResolvedValue({ id: 'p1', nomor: 5, status: 'lunas' });
+    const user = await isiKeranjang();
+    await bukaBayarTunai(user);
+    await user.click(screen.getByRole('button', { name: 'Simpan Lunas' }));
+    await screen.findByText('Pesanan #5 tersimpan, lunas.');
+    m.otomatis = true;
+    m.buatPesanan.mockResolvedValue({ id: 'p2', nomor: 6, status: 'belum_bayar' });
+    await user.click(screen.getByRole('button', { name: /Pecel Lele/ }));
+    await user.click(screen.getByRole('button', { name: /Lihat pesanan/ }));
+    await user.click(screen.getByRole('button', { name: 'Simpan, Bayar Nanti' }));
+    await screen.findByText('Pesanan #6 tersimpan, belum bayar.');
+    expect(m.cetakPesanan).not.toHaveBeenCalled();
   });
 });

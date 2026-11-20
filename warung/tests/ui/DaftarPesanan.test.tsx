@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { Pengguna, Pesanan, SesiKas } from '../../src/types';
 
 const m = vi.hoisted(() => ({
-  lunasiPesanan: vi.fn(), batalkanPesanan: vi.fn(), cetakPesanan: vi.fn(), pesanan: [] as unknown[],
+  lunasiPesanan: vi.fn(), batalkanPesanan: vi.fn(), cetakPesanan: vi.fn(), otomatis: false, pesanan: [] as unknown[],
 }));
 vi.mock('../../src/firebase', () => ({ db: {}, auth: {} }));
 vi.mock('../../src/data/pesanan', () => ({
@@ -16,7 +16,9 @@ vi.mock('../../src/data/pesanan', () => ({
     return () => {};
   },
 }));
-vi.mock('../../src/printer/printer', () => ({ cetakPesanan: m.cetakPesanan, bolehCetak: (p: Pesanan) => p.status === 'lunas' }));
+vi.mock('../../src/printer/printer', () => ({
+  cetakPesanan: m.cetakPesanan, bolehCetak: (p: Pesanan) => p.status === 'lunas', cetakOtomatis: () => m.otomatis,
+}));
 vi.mock('../../src/data/pengaturan', () => ({
   ambilPengaturan: vi.fn(async () => ({ namaWarung: 'W', qrisStatis: null, namaMerchant: null })),
 }));
@@ -35,6 +37,7 @@ beforeEach(() => {
   m.lunasiPesanan.mockReset().mockResolvedValue(undefined);
   m.batalkanPesanan.mockReset().mockResolvedValue(undefined);
   m.cetakPesanan.mockReset().mockResolvedValue(undefined);
+  m.otomatis = false;
   m.pesanan = [
     pesanan({ id: 'p1', nomor: 1 }),
     pesanan({ id: 'p2', nomor: 2, label: 'Meja 3', status: 'belum_bayar', caraBayar: null, total: 34000 }),
@@ -63,6 +66,25 @@ describe('DaftarPesanan', () => {
     expect(m.lunasiPesanan).toHaveBeenCalledWith({}, { uid: 'u1', nama: 'Sari' }, 'p2', 'tunai', null);
     expect(await screen.findByText('Pesanan #2 lunas.')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(m.cetakPesanan).not.toHaveBeenCalled();
+  });
+
+  it('prints automatically after paying when the setting is on; a printer failure only shows its error', async () => {
+    m.otomatis = true;
+    m.cetakPesanan.mockRejectedValue(new Error('Printer tidak tersambung. Cek Bluetooth dan printer.'));
+    const user = userEvent.setup();
+    render_();
+    const baris = screen.getByText('#2').closest('li')!;
+    await user.click(within(baris).getByRole('button', { name: 'Bayar' }));
+    const dialog = screen.getByRole('dialog', { name: 'Bayar Pesanan #2' });
+    await user.click(within(dialog).getByRole('button', { name: 'Tunai' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Simpan Lunas' }));
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Printer tidak tersambung. Cek Bluetooth dan printer.');
+    expect(screen.getByText('Pesanan #2 lunas.')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(m.cetakPesanan).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p2', status: 'lunas', caraBayar: 'tunai', uangDiterima: null, jumlahCetak: 0 }), 'Warung Lele',
+    );
   });
 
   it('prints paid orders (Cetak ulang once printed) and cancels with a required reason', async () => {

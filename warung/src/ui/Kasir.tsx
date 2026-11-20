@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { pantauMenu } from '../data/menu';
 import { buatPesanan } from '../data/pesanan';
 import { formatRupiah } from '../lib/uang';
+import { cetakOtomatis, cetakPesanan } from '../printer/printer';
 import type { KategoriMenu, Menu, Pengguna, SesiKas } from '../types';
 import Bayar, { type DataBayar } from './Bayar';
 import { pesanGalat } from './galat';
@@ -14,9 +15,9 @@ import { LayarGalat, LayarMemuat } from './Status';
 
 const KATEGORI: KategoriMenu[] = ['Makanan', 'Nasi & Tambahan', 'Minuman'];
 
-interface Props { pengguna: Pengguna; sesi: SesiKas }
+interface Props { pengguna: Pengguna; sesi: SesiKas; namaWarung: string }
 
-export default function Kasir({ pengguna, sesi }: Props) {
+export default function Kasir({ pengguna, sesi, namaWarung }: Props) {
   const [menu, setMenu] = useState<Menu[] | null>(null);
   const [galatMenu, setGalatMenu] = useState<string | null>(null);
   const [muatKe, setMuatKe] = useState(0);
@@ -24,6 +25,7 @@ export default function Kasir({ pengguna, sesi }: Props) {
   const [layar, setLayar] = useState<'menu' | 'keranjang' | 'bayar'>('menu');
   const [galat, setGalat] = useState<string | null>(null);
   const [kabar, setKabar] = useState<string | null>(null);
+  const [galatCetak, setGalatCetak] = useState<string | null>(null);
   const [menyimpan, setMenyimpan] = useState(false);
 
   useEffect(() => {
@@ -47,7 +49,10 @@ export default function Kasir({ pengguna, sesi }: Props) {
     });
     k.kosongkan();
     setLayar('menu');
+    setGalatCetak(null);
     setKabar(`Pesanan #${p.nomor} tersimpan, ${bayar ? 'lunas' : 'belum bayar'}.`);
+    // The order is already saved: a printer failure is only reported, never undoes the payment.
+    if (bayar && cetakOtomatis()) cetakPesanan(p, namaWarung).catch((e) => setGalatCetak(pesanGalat(e)));
   }
 
   async function simpanNanti() {
@@ -106,10 +111,15 @@ export default function Kasir({ pengguna, sesi }: Props) {
         })}
       </div>
 
-      {kabar && (
-        <p role="status" className="sticky bottom-20 mx-3 mb-2 rounded-xl bg-green-800 p-3 text-center text-base font-medium text-white">
-          {kabar}
-        </p>
+      {(kabar || galatCetak) && (
+        <div className="sticky bottom-20 mx-3 mb-2 flex flex-col gap-2">
+          {kabar && <p role="status" className="rounded-xl bg-green-800 p-3 text-center text-base font-medium text-white">{kabar}</p>}
+          {galatCetak && (
+            <p role="alert" className="rounded-xl border-2 border-red-300 bg-white p-3 text-center text-base font-medium text-red-800">
+              {galatCetak}
+            </p>
+          )}
+        </div>
       )}
 
       {k.jumlahItem > 0 && (

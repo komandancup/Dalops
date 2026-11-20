@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "vitest run tests/lib tests/api",
+    "test": "vitest run tests/lib tests/api tests/ui",
     "test:emu": "firebase emulators:exec --only auth,firestore \"vitest run --no-file-parallelism tests/rules tests/data\""
   },
   "dependencies": {
@@ -28,11 +28,15 @@
   "devDependencies": {
     "@capacitor/cli": "^8.3.4",
     "@firebase/rules-unit-testing": "^5.0.2",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.13",
     "@types/node": "^22.14.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "firebase-tools": "^15.37.0",
+    "jsdom": "^31.0.1",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.23.15",
     "typescript": "~5.8.2",

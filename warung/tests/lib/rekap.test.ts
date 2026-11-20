@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daftarPeringatan, keCSV, rekapPeriode } from '../../src/lib/rekap';
+import { cekSesi, daftarPeringatan, keCSV, rekapPeriode } from '../../src/lib/rekap';
 import type { Koreksi, Pelaku, Pengeluaran, Pesanan, SesiKas } from '../../src/types';
 
 const pelaku: Pelaku = { uid: 'u1', nama: 'Budi' };
@@ -126,7 +126,8 @@ describe('daftarPeringatan', () => {
     const tutup = new Date('2026-11-20T14:00:00Z');
     const s = buatSesi({
       id: 's9', status: 'tutup', ditutupOleh: { uid: 'u2', nama: 'Sari' }, ditutupPada: tutup,
-      selisihTunai: -2000, selisihQris: 500, modalSaran: 100000, modalAwal: 150000,
+      tunaiSeharusnya: 150000, tunaiDihitung: 148000, selisihTunai: -2000,
+      qrisAplikasi: 0, qrisMerchant: 500, selisihQris: 500, modalSaran: 100000, modalAwal: 150000,
       alasanUbahModal: 'tambah receh',
     });
     const out = daftarPeringatan({ sesi: [s], pesanan: [], pengeluaran: [] });
@@ -141,7 +142,10 @@ describe('daftarPeringatan', () => {
   });
 
   it('selisih nol atau belum ditutup tidak menghasilkan apa-apa', () => {
-    const s1 = buatSesi({ id: 'a', status: 'tutup', selisihTunai: 0, selisihQris: 0, ditutupOleh: pelaku, ditutupPada: waktu });
+    const s1 = buatSesi({
+      id: 'a', status: 'tutup', tunaiSeharusnya: 0, tunaiDihitung: 0, selisihTunai: 0,
+      qrisAplikasi: 0, qrisMerchant: 0, selisihQris: 0, ditutupOleh: pelaku, ditutupPada: waktu,
+    });
     const s2 = buatSesi({ id: 'b' });
     expect(daftarPeringatan({ sesi: [s1, s2], pesanan: [], pengeluaran: [] })).toEqual([]);
   });
@@ -150,6 +154,84 @@ describe('daftarPeringatan', () => {
     const lama = buatPesanan({ id: 'l', status: 'batal', dibatalkanOleh: pelaku, dibatalkanPada: new Date('2026-11-19T01:00:00Z'), alasanBatal: 'a' });
     const baru = buatPesanan({ id: 'n', status: 'batal', dibatalkanOleh: pelaku, dibatalkanPada: new Date('2026-11-20T01:00:00Z'), alasanBatal: 'b' });
     expect(daftarPeringatan({ sesi: [], pesanan: [lama, baru], pengeluaran: [] }).map((o) => o.refId)).toEqual(['n', 'l']);
+  });
+});
+
+describe('tutup kas dicek ulang dari catatan (R5)', () => {
+  const tutup = new Date('2026-11-20T14:00:00Z');
+  const sari = { uid: 'u2', nama: 'Sari' };
+  // modal 100.000 + tunai 30.000 - laci 10.000 = 120.000 seharusnya; QRIS 23.000.
+  const pesananS = [
+    buatPesanan({ id: 'p1', sesiKasId: 's5', total: 30000, caraBayar: 'tunai' }),
+    buatPesanan({ id: 'p2', sesiKasId: 's5', total: 23000, caraBayar: 'qris' }),
+    buatPesanan({ id: 'p3', sesiKasId: 's5', total: 99000, status: 'batal' }),
+    buatPesanan({ id: 'lain', sesiKasId: 'sX', total: 50000, caraBayar: 'tunai' }),
+  ];
+  const pengeluaranS = [
+    buatPengeluaran({ id: 'e1', sesiKasId: 's5', nominal: 10000, dariLaci: true }),
+    buatPengeluaran({ id: 'e2', sesiKasId: 's5', nominal: 7000, dariLaci: false }),
+  ];
+  const sesiJujur = buatSesi({
+    id: 's5', status: 'tutup', modalAwal: 100000, modalSaran: 100000, ditutupOleh: sari, ditutupPada: tutup,
+    tunaiSeharusnya: 120000, tunaiDihitung: 120000, selisihTunai: 0,
+    qrisAplikasi: 23000, qrisMerchant: 23000, selisihQris: 0,
+  });
+
+  it('angka yang cocok tidak menghasilkan peringatan', () => {
+    expect(daftarPeringatan({ sesi: [sesiJujur], pesanan: pesananS, pengeluaran: pengeluaranS })).toEqual([]);
+  });
+
+  it('tunai seharusnya yang dikecilkan memicu tutup_tidak_cocok dan selisih dihitung ulang', () => {
+    // The phone wrote seharusnya 100.000 so the 20.000 short looks like no difference.
+    const s = { ...sesiJujur, tunaiSeharusnya: 100000, tunaiDihitung: 100000, selisihTunai: 0 };
+    const out = daftarPeringatan({ sesi: [s], pesanan: pesananS, pengeluaran: pengeluaranS });
+    const by = Object.fromEntries(out.map((o) => [o.jenis, o]));
+    expect(out.map((o) => o.jenis).sort()).toEqual(['selisih_tunai', 'tutup_tidak_cocok']);
+    expect(by.tutup_tidak_cocok).toEqual({
+      jenis: 'tutup_tidak_cocok', waktu: tutup, refId: 's5',
+      pesan: 'Angka tutup kas 2026-11-20 tidak cocok dengan catatan pesanan (seharusnya Rp 120.000, tercatat Rp 100.000).',
+    });
+    expect(by.selisih_tunai.pesan).toBe('Selisih tunai -Rp 20.000 di kas 2026-11-20 (ditutup Sari, tercatat Rp 0)');
+  });
+
+  it('QRIS aplikasi yang tidak cocok juga memicu tutup_tidak_cocok', () => {
+    const s = { ...sesiJujur, qrisAplikasi: 20000, qrisMerchant: 20000, selisihQris: 0 };
+    const out = daftarPeringatan({ sesi: [s], pesanan: pesananS, pengeluaran: pengeluaranS });
+    expect(out.map((o) => o.pesan).sort()).toEqual([
+      'Angka tutup kas 2026-11-20 tidak cocok dengan catatan pesanan (seharusnya Rp 23.000, tercatat Rp 20.000).',
+      'Selisih QRIS -Rp 3.000 di kas 2026-11-20 (ditutup Sari, tercatat Rp 0)',
+    ]);
+    expect(out.every((o) => o.refId === 's5' && o.waktu === tutup)).toBe(true);
+    expect(out.map((o) => o.jenis).sort()).toEqual(['selisih_qris', 'tutup_tidak_cocok']);
+  });
+
+  it('kas ditutup dengan pesanan belum bayar', () => {
+    const belum = [
+      ...pesananS,
+      buatPesanan({ id: 'b1', sesiKasId: 's5', total: 10000, status: 'belum_bayar', caraBayar: null }),
+      buatPesanan({ id: 'b2', sesiKasId: 's5', total: 12000, status: 'belum_bayar', caraBayar: null }),
+    ];
+    const out = daftarPeringatan({ sesi: [sesiJujur], pesanan: belum, pengeluaran: pengeluaranS });
+    expect(out).toEqual([{
+      jenis: 'tutup_tidak_cocok', waktu: tutup, refId: 's5', pesan: 'Kas 2026-11-20 ditutup dengan 2 pesanan belum bayar.',
+    }]);
+  });
+
+  it('sesi yang masih buka tidak dicek', () => {
+    const buka = buatSesi({ id: 's5', modalAwal: 100000 });
+    expect(daftarPeringatan({ sesi: [buka], pesanan: pesananS, pengeluaran: pengeluaranS })).toEqual([]);
+  });
+
+  it('cekSesi memberi angka hitung ulang di samping angka tersimpan', () => {
+    const s = { ...sesiJujur, tunaiSeharusnya: 100000, tunaiDihitung: 100000, selisihTunai: 0 };
+    expect(cekSesi(s, pesananS, pengeluaranS)).toEqual({
+      tunaiSeharusnya: 120000, tunaiSeharusnyaTersimpan: 100000,
+      selisihTunai: -20000, selisihTunaiTersimpan: 0,
+      qrisAplikasi: 23000, qrisAplikasiTersimpan: 23000,
+      selisihQris: 0, selisihQrisTersimpan: 0,
+      jumlahBelumBayar: 0, cocok: false,
+    });
+    expect(cekSesi(sesiJujur, pesananS, pengeluaranS).cocok).toBe(true);
   });
 });
 

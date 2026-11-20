@@ -4,16 +4,17 @@ import type { Peran, Pengguna } from '../types';
 
 export type Tab = 'beranda' | 'kasir' | 'pesanan' | 'pengeluaran' | 'tutup' | 'lainnya';
 
-const TAB: { id: Tab; teks: string; Ikon: LucideIcon; pemilikSaja?: true }[] = [
-  { id: 'beranda', teks: 'Beranda', Ikon: Home, pemilikSaja: true },
+// Owner: 5 tabs (Pengeluaran lives in Lainnya) so every label fits at 360px. Karyawan: 4 tabs.
+const TAB: { id: Tab; teks: string; Ikon: LucideIcon; untuk?: Peran }[] = [
+  { id: 'beranda', teks: 'Beranda', Ikon: Home, untuk: 'pemilik' },
   { id: 'kasir', teks: 'Kasir', Ikon: ShoppingCart },
   { id: 'pesanan', teks: 'Pesanan', Ikon: ClipboardList },
-  { id: 'pengeluaran', teks: 'Pengeluaran', Ikon: Wallet },
+  { id: 'pengeluaran', teks: 'Pengeluaran', Ikon: Wallet, untuk: 'karyawan' },
   { id: 'tutup', teks: 'Tutup Kas', Ikon: Vault },
-  { id: 'lainnya', teks: 'Lainnya', Ikon: IkonMenu, pemilikSaja: true },
+  { id: 'lainnya', teks: 'Lainnya', Ikon: IkonMenu, untuk: 'pemilik' },
 ];
 
-export const daftarTab = (peran: Peran) => TAB.filter((t) => peran === 'pemilik' || !t.pemilikSaja);
+export const daftarTab = (peran: Peran) => TAB.filter((t) => !t.untuk || t.untuk === peran);
 export const tabAwal = (peran: Peran): Tab => (peran === 'pemilik' ? 'beranda' : 'kasir');
 
 interface Props {

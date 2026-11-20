@@ -11,7 +11,9 @@ import Kasir from './Kasir';
 import Kerangka, { tabAwal, type Tab } from './Kerangka';
 import Masuk from './Masuk';
 import Pengeluaran from './Pengeluaran';
-import { LayarGalat, LayarMemuat, SegeraHadir } from './Status';
+import Beranda from './pemilik/Beranda';
+import Lainnya, { type Tujuan } from './pemilik/Lainnya';
+import { LayarGalat, LayarMemuat } from './Status';
 import TutupKas from './TutupKas';
 
 export default function App() {
@@ -46,6 +48,7 @@ export default function App() {
 
 function Utama({ pengguna }: { pengguna: Pengguna }) {
   const [tab, setTab] = useState<Tab>(tabAwal(pengguna.peran));
+  const [tujuan, setTujuan] = useState<Tujuan>({ halaman: 'menu' });
   const [namaWarung, setNamaWarung] = useState('Warung');
   const [sesi, setSesi] = useState<SesiKas | null | undefined>(undefined);
   const [galatSesi, setGalatSesi] = useState<string | null>(null);
@@ -74,11 +77,24 @@ function Utama({ pengguna }: { pengguna: Pengguna }) {
   if (tab === 'pesanan') lain = isiSesi((s) => <DaftarPesanan pengguna={pengguna} sesi={s} namaWarung={namaWarung} />);
   else if (tab === 'pengeluaran') lain = isiSesi((s) => <Pengeluaran pengguna={pengguna} sesi={s} />);
   else if (tab === 'tutup') lain = isiSesi((s) => <TutupKas pengguna={pengguna} sesi={s} />);
-  else if (tab === 'beranda') lain = <SegeraHadir judul="Beranda" />;
-  else if (tab === 'lainnya') lain = <SegeraHadir judul="Lainnya" />;
+  else if (tab === 'beranda') {
+    lain = isiSesi((s) => (
+      <Beranda key={s?.id ?? 'tutup'} sesi={s} onBuka={(t) => { setTujuan(t); setTab('lainnya'); }} />
+    ));
+  } else if (tab === 'lainnya') {
+    lain = (
+      <Lainnya pengguna={pengguna} tujuan={tujuan} onTujuan={setTujuan}
+        pengeluaranKas={() => isiSesi((s) => <Pengeluaran pengguna={pengguna} sesi={s} />)} />
+    );
+  }
+
+  function pilihTab(t: Tab) {
+    if (t === 'lainnya') setTujuan({ halaman: 'menu' }); // the tab always opens on its menu
+    setTab(t);
+  }
 
   return (
-    <Kerangka namaWarung={namaWarung} pengguna={pengguna} tab={tab} onTab={setTab} onKeluar={() => void keluar(auth).catch(() => {})}>
+    <Kerangka namaWarung={namaWarung} pengguna={pengguna} tab={tab} onTab={pilihTab} onKeluar={() => void keluar(auth).catch(() => {})}>
       <div hidden={tab !== 'kasir'} className="min-h-full">{kasir}</div>
       {lain}
     </Kerangka>

@@ -1,3 +1,4 @@
+import { ringkasSesi } from './kas';
 import { formatRupiah } from './uang';
 import type { KategoriPengeluaran, Koreksi, Pengeluaran, Pesanan, SesiKas } from '../types';
 
@@ -15,7 +16,7 @@ export interface Rekap {
 }
 
 export interface Peringatan {
-  jenis: 'batal_pesanan' | 'batal_pengeluaran' | 'selisih_tunai' | 'selisih_qris' | 'modal_diubah';
+  jenis: 'batal_pesanan' | 'batal_pengeluaran' | 'selisih_tunai' | 'selisih_qris' | 'modal_diubah' | 'tutup_tidak_cocok';
   waktu: Date;
   pesan: string;
   refId: string;
@@ -87,6 +88,52 @@ export function rekapPeriode(
   };
 }
 
+/** Close figures recomputed from the session's own records, beside what the closing phone stored. */
+export interface CekSesi {
+  tunaiSeharusnya: number;
+  tunaiSeharusnyaTersimpan: number;
+  /** tunaiDihitung − recomputed tunaiSeharusnya. */
+  selisihTunai: number;
+  selisihTunaiTersimpan: number;
+  qrisAplikasi: number;
+  qrisAplikasiTersimpan: number;
+  /** qrisMerchant − recomputed QRIS sales. */
+  selisihQris: number;
+  selisihQrisTersimpan: number;
+  jumlahBelumBayar: number;
+  /** Stored expected figures match the records and no order was left unpaid. */
+  cocok: boolean;
+}
+
+/**
+ * Ruling R5: tunaiSeharusnya/qrisAplikasi are written by the closing phone and the rules cannot sum,
+ * so owner views recompute them from the session's pesanan/pengeluaran (other sessions are ignored).
+ */
+export function cekSesi(sesi: SesiKas, pesanan: Pesanan[], pengeluaran: Pengeluaran[]): CekSesi {
+  const r = ringkasSesi(
+    sesi,
+    pesanan.filter((p) => p.sesiKasId === sesi.id),
+    pengeluaran.filter((e) => e.sesiKasId === sesi.id),
+  );
+  const tunaiSeharusnyaTersimpan = sesi.tunaiSeharusnya ?? 0;
+  const qrisAplikasiTersimpan = sesi.qrisAplikasi ?? 0;
+  const dihitung = sesi.tunaiDihitung ?? 0;
+  const merchant = sesi.qrisMerchant ?? 0;
+  return {
+    tunaiSeharusnya: r.tunaiSeharusnya,
+    tunaiSeharusnyaTersimpan,
+    selisihTunai: dihitung - r.tunaiSeharusnya,
+    selisihTunaiTersimpan: sesi.selisihTunai ?? 0,
+    qrisAplikasi: r.penjualanQris,
+    qrisAplikasiTersimpan,
+    selisihQris: merchant - r.penjualanQris,
+    selisihQrisTersimpan: sesi.selisihQris ?? 0,
+    jumlahBelumBayar: r.jumlahBelumBayar,
+    cocok: r.tunaiSeharusnya === tunaiSeharusnyaTersimpan && r.penjualanQris === qrisAplikasiTersimpan
+      && r.jumlahBelumBayar === 0,
+  };
+}
+
 export function daftarPeringatan(d: {
   sesi: SesiKas[];
   pesanan: Pesanan[];
@@ -116,20 +163,36 @@ export function daftarPeringatan(d: {
 
   for (const s of d.sesi) {
     if (s.ditutupOleh && s.ditutupPada) {
-      if (s.selisihTunai) {
+      const c = cekSesi(s, d.pesanan, d.pengeluaran);
+      const dasar = { waktu: s.ditutupPada, refId: s.id };
+      const tidakCocok = (hitungUlang: number, tersimpan: number) => ({
+        ...dasar,
+        jenis: 'tutup_tidak_cocok' as const,
+        pesan: `Angka tutup kas ${s.tanggal} tidak cocok dengan catatan pesanan (seharusnya ${formatRupiah(hitungUlang)}, tercatat ${formatRupiah(tersimpan)}).`,
+      });
+      if (c.tunaiSeharusnya !== c.tunaiSeharusnyaTersimpan) out.push(tidakCocok(c.tunaiSeharusnya, c.tunaiSeharusnyaTersimpan));
+      if (c.qrisAplikasi !== c.qrisAplikasiTersimpan) out.push(tidakCocok(c.qrisAplikasi, c.qrisAplikasiTersimpan));
+      if (c.jumlahBelumBayar > 0) {
         out.push({
-          jenis: 'selisih_tunai',
-          waktu: s.ditutupPada,
-          refId: s.id,
-          pesan: `Selisih tunai ${formatRupiah(s.selisihTunai)} di kas ${s.tanggal} (ditutup ${s.ditutupOleh.nama})`,
+          ...dasar,
+          jenis: 'tutup_tidak_cocok',
+          pesan: `Kas ${s.tanggal} ditutup dengan ${c.jumlahBelumBayar} pesanan belum bayar.`,
         });
       }
-      if (s.selisihQris) {
+      // Selisih from the recomputed expectation; the stored figure is shown only when it differs.
+      const tercatat = (hitung: number, simpan: number) => (hitung === simpan ? '' : `, tercatat ${formatRupiah(simpan)}`);
+      if (c.selisihTunai) {
         out.push({
+          ...dasar,
+          jenis: 'selisih_tunai',
+          pesan: `Selisih tunai ${formatRupiah(c.selisihTunai)} di kas ${s.tanggal} (ditutup ${s.ditutupOleh.nama}${tercatat(c.selisihTunai, c.selisihTunaiTersimpan)})`,
+        });
+      }
+      if (c.selisihQris) {
+        out.push({
+          ...dasar,
           jenis: 'selisih_qris',
-          waktu: s.ditutupPada,
-          refId: s.id,
-          pesan: `Selisih QRIS ${formatRupiah(s.selisihQris)} di kas ${s.tanggal} (ditutup ${s.ditutupOleh.nama})`,
+          pesan: `Selisih QRIS ${formatRupiah(c.selisihQris)} di kas ${s.tanggal} (ditutup ${s.ditutupOleh.nama}${tercatat(c.selisihQris, c.selisihQrisTersimpan)})`,
         });
       }
     }

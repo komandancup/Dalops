@@ -23,3 +23,10 @@ export function tanggalWIB(d: Date): string {
 export function jamWIB(d: Date): string {
   return jamFmt.format(d);
 }
+
+/** Shifts a YYYY-MM-DD date string by n days (calendar arithmetic, no time zone involved). */
+export function tambahHari(tanggal: string, n: number): string {
+  const t = new Date(`${tanggal}T00:00:00Z`);
+  t.setUTCDate(t.getUTCDate() + n);
+  return t.toISOString().slice(0, 10);
+}

@@ -5,6 +5,9 @@ name: Build APK Warung
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -18,9 +21,16 @@ jobs:
           WARUNG_URL: ${{ vars.WARUNG_URL }}
         run: |
           if [ -z "$WARUNG_URL" ]; then
-            echo "::error::Repository variable WARUNG_URL is not set (e.g. https://nama-warung.vercel.app)."
+            echo "::error::Variabel WARUNG_URL belum diisi / Repository variable WARUNG_URL is not set (e.g. https://nama-warung.vercel.app)."
             exit 1
           fi
+          case "$WARUNG_URL" in
+            https://*) ;;
+            *)
+              echo "::error::WARUNG_URL harus diawali https:// / WARUNG_URL must start with https:// (e.g. https://nama-warung.vercel.app)."
+              exit 1
+              ;;
+          esac
 
       - uses: actions/checkout@v4
 

@@ -1,4 +1,4 @@
-import { ringkasSesi } from './kas';
+import { hitungTotal, ringkasSesi } from './kas';
 import { formatRupiah } from './uang';
 import type { KategoriPengeluaran, Koreksi, Pengeluaran, Pesanan, SesiKas } from '../types';
 
@@ -16,7 +16,8 @@ export interface Rekap {
 }
 
 export interface Peringatan {
-  jenis: 'batal_pesanan' | 'batal_pengeluaran' | 'selisih_tunai' | 'selisih_qris' | 'modal_diubah' | 'tutup_tidak_cocok';
+  jenis: 'batal_pesanan' | 'batal_pengeluaran' | 'selisih_tunai' | 'selisih_qris' | 'modal_diubah' | 'tutup_tidak_cocok'
+    | 'pesanan_tidak_wajar';
   waktu: Date;
   pesan: string;
   refId: string;
@@ -143,12 +144,40 @@ export function cekSesi(sesi: SesiKas, pesanan: Pesanan[], pengeluaran: Pengelua
   };
 }
 
+const bulatPositif = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n > 0;
+
+/**
+ * The rules can only check the first item of an order, so the owner's view re-adds every order:
+ * an item with a bad jumlah/harga, or a total that is not the sum of its items, is flagged.
+ */
+function cekPesanan(p: Pesanan): string | null {
+  const item = Array.isArray(p.item) ? p.item : [];
+  if (item.some((i) => !bulatPositif(i?.jumlah) || !bulatPositif(i?.harga))) return 'berisi jumlah/harga tidak valid.';
+  const seharusnya = hitungTotal(item);
+  if (p.total !== seharusnya) {
+    return `total ${formatRupiah(p.total)} tidak sesuai isi pesanan (${formatRupiah(seharusnya)}).`;
+  }
+  return null;
+}
+
 export function daftarPeringatan(d: {
   sesi: SesiKas[];
   pesanan: Pesanan[];
   pengeluaran: Pengeluaran[];
 }): Peringatan[] {
   const out: Peringatan[] = [];
+
+  for (const p of d.pesanan) {
+    const salah = p.status === 'batal' ? null : cekPesanan(p);
+    if (salah) {
+      out.push({
+        jenis: 'pesanan_tidak_wajar',
+        waktu: p.dibuatPada,
+        refId: p.id,
+        pesan: `Pesanan #${p.nomor} (${p.tanggal}) tidak wajar: ${salah}`,
+      });
+    }
+  }
 
   for (const p of d.pesanan) {
     if (p.status !== 'batal' || !p.dibatalkanOleh || !p.dibatalkanPada) continue;

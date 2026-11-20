@@ -51,6 +51,11 @@ function Isi({ data, hari, sesi, onBuka }: { data: Periode; hari: string } & Pro
     if (p.jenis === 'batal_pengeluaran') {
       return { halaman: 'pembatalan', fokus: { id: p.refId, tanggal: data.pengeluaran.find((x) => x.id === p.refId)?.tanggal ?? hari } };
     }
+    if (p.jenis === 'pesanan_tidak_wajar') {
+      // The order is shown inside its session in Riwayat Kas.
+      const x = data.pesanan.find((o) => o.id === p.refId);
+      return { halaman: 'riwayat', fokus: { id: x?.sesiKasId ?? p.refId, tanggal: x?.tanggal ?? hari } };
+    }
     return { halaman: 'riwayat', fokus: { id: p.refId, tanggal: data.sesi.find((x) => x.id === p.refId)?.tanggal ?? hari } };
   }
 
@@ -118,7 +123,9 @@ function Isi({ data, hari, sesi, onBuka }: { data: Periode; hari: string } & Pro
 }
 
 /** Alerts about money that may be missing, drawn in red. */
-const PENTING = new Set<Peringatan['jenis']>(['tutup_tidak_cocok', 'selisih_tunai', 'selisih_qris']);
+const PENTING = new Set<Peringatan['jenis']>([
+  'tutup_tidak_cocok', 'selisih_tunai', 'selisih_qris', 'pesanan_tidak_wajar',
+]);
 
 function Angka({ label, nilai }: { label: string; nilai: string }) {
   return (

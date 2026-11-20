@@ -285,6 +285,29 @@ describe('pesanan', () => {
     await assertSucceeds(buatPesananBatch(d, 'p1', 1));
   });
 
+  it('pesanan items: at most 30, first item must be a valid line, one-line total must equal harga × jumlah', async () => {
+    await seedSesiBuka();
+    const d = db('budi');
+    const baris = (o: Record<string, unknown> = {}) => ({ menuId: 'lele', nama: 'Pecel Lele', harga: 15000, jumlah: 2, ...o });
+    const dengan = (item: unknown[], total = 30000) => pesananBaru(1, BUDI, { item, total });
+    await assertFails(buatPesananBatch(d, 'p1', 1, dengan([baris()], 1000)));
+    await assertFails(buatPesananBatch(d, 'p1', 1, dengan([baris({ jumlah: -2 })], 30000)));
+    await assertFails(buatPesananBatch(d, 'p1', 1, dengan([baris({ jumlah: 0 })], 30000)));
+    await assertFails(buatPesananBatch(d, 'p1', 1, dengan([baris({ harga: 15000.5 })], 30000)));
+    await assertFails(buatPesananBatch(d, 'p1', 1, dengan([baris({ harga: -15000, jumlah: -2 })], 30000)));
+    await assertFails(buatPesananBatch(d, 'p1', 1, dengan([baris({ nama: 5 })], 30000)));
+    await assertFails(buatPesananBatch(d, 'p1', 1, dengan(Array.from({ length: 31 }, () => baris({ harga: 1000, jumlah: 1 })), 31000)));
+    await assertSucceeds(buatPesananBatch(d, 'p1', 1, dengan(Array.from({ length: 30 }, () => baris({ harga: 1000, jumlah: 1 })), 30000)));
+  });
+
+  it('a multi-line order whose first line is valid is accepted (the owner alert re-adds the rest)', async () => {
+    await seedSesiBuka();
+    await assertSucceeds(buatPesananBatch(db('budi'), 'p1', 1, pesananBaru(1, BUDI, {
+      item: [{ menuId: 'lele', nama: 'Pecel Lele', harga: 15000, jumlah: 2 }, { menuId: 'teh', nama: 'Es Teh', harga: 4000, jumlah: 2 }],
+      total: 38000,
+    })));
+  });
+
   it('belum_bayar → lunas with caraBayar is allowed', async () => {
     await seedSesiBuka(1);
     await seed('pesanan/p1', pesananBaru(1));

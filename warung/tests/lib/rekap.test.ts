@@ -11,6 +11,8 @@ function buatPesanan(o: Partial<Pesanan>): Pesanan {
     item: [], total: 0, status: 'lunas', caraBayar: 'tunai', uangDiterima: null,
     jumlahCetak: 0, dibuatOleh: pelaku, dibuatPada: waktu, dilunasiOleh: null, dilunasiPada: null,
     dibatalkanOleh: null, dibatalkanPada: null, alasanBatal: null, ...o,
+    // Unless given, the items add up to the total (one line), like every order the app writes.
+    ...(o.item === undefined && o.total ? { item: [{ menuId: 'm', nama: 'Menu', harga: o.total, jumlah: 1 }] } : {}),
   };
 }
 function buatPengeluaran(o: Partial<Pengeluaran>): Pengeluaran {
@@ -154,6 +156,48 @@ describe('daftarPeringatan', () => {
     const lama = buatPesanan({ id: 'l', status: 'batal', dibatalkanOleh: pelaku, dibatalkanPada: new Date('2026-11-19T01:00:00Z'), alasanBatal: 'a' });
     const baru = buatPesanan({ id: 'n', status: 'batal', dibatalkanOleh: pelaku, dibatalkanPada: new Date('2026-11-20T01:00:00Z'), alasanBatal: 'b' });
     expect(daftarPeringatan({ sesi: [], pesanan: [lama, baru], pengeluaran: [] }).map((o) => o.refId)).toEqual(['n', 'l']);
+  });
+});
+
+describe('pesanan tidak wajar', () => {
+  it('total yang tidak sesuai isi pesanan memicu peringatan merah', () => {
+    const p = buatPesanan({ id: 'w', nomor: 7, total: 1000, item: [item('Pecel Lele', 15000, 2)] });
+    expect(daftarPeringatan({ sesi: [], pesanan: [p], pengeluaran: [] })).toEqual([{
+      jenis: 'pesanan_tidak_wajar', waktu, refId: 'w',
+      pesan: 'Pesanan #7 (2026-11-20) tidak wajar: total Rp 1.000 tidak sesuai isi pesanan (Rp 30.000).',
+    }]);
+  });
+
+  it('jumlah atau harga yang bukan bilangan bulat positif memicu peringatan', () => {
+    const salah = [
+      { harga: 15000, jumlah: -1 },
+      { harga: 15000, jumlah: 0 },
+      { harga: 15000, jumlah: 1.5 },
+      { harga: -15000, jumlah: 1 },
+      { harga: 2 ** 60, jumlah: 1 },
+      { harga: '15000' as unknown as number, jumlah: 1 },
+    ];
+    for (const [i, x] of salah.entries()) {
+      const p = buatPesanan({ id: `v${i}`, nomor: 8, total: 15000, item: [item('Pecel Lele', 15000, 1), { ...item('Es Teh', 0, 0), ...x }] });
+      const out = daftarPeringatan({ sesi: [], pesanan: [p], pengeluaran: [] });
+      expect(out).toEqual([{
+        jenis: 'pesanan_tidak_wajar', waktu, refId: `v${i}`,
+        pesan: 'Pesanan #8 (2026-11-20) tidak wajar: berisi jumlah/harga tidak valid.',
+      }]);
+    }
+  });
+
+  it('pesanan wajar atau sudah batal tidak memicu peringatan ini', () => {
+    const wajar = buatPesanan({ id: 'ok', total: 38000, item: [item('Pecel Lele', 15000, 2), item('Es Teh', 4000, 2)] });
+    const belum = buatPesanan({ id: 'bb', total: 15000, status: 'belum_bayar', caraBayar: null, item: [item('Pecel Lele', 15000, 1)] });
+    const batal = buatPesanan({ id: 'bt', total: 1, status: 'batal', item: [item('Pecel Lele', 15000, 2)] });
+    const out = daftarPeringatan({ sesi: [], pesanan: [wajar, belum, batal], pengeluaran: [] });
+    expect(out.filter((o) => o.jenis === 'pesanan_tidak_wajar')).toEqual([]);
+  });
+
+  it('pesanan belum bayar yang tidak wajar juga diperingatkan', () => {
+    const p = buatPesanan({ id: 'u', nomor: 2, total: 5000, status: 'belum_bayar', caraBayar: null, item: [item('Pecel Lele', 15000, 1)] });
+    expect(daftarPeringatan({ sesi: [], pesanan: [p], pengeluaran: [] }).map((o) => o.jenis)).toEqual(['pesanan_tidak_wajar']);
   });
 });
 

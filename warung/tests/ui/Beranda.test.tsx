@@ -22,6 +22,7 @@ function pesanan(o: Partial<Pesanan>): Pesanan {
     item: [], total: 0, status: 'lunas', caraBayar: 'tunai', uangDiterima: null,
     jumlahCetak: 0, dibuatOleh: budi, dibuatPada: waktu, dilunasiOleh: budi, dilunasiPada: waktu,
     dibatalkanOleh: null, dibatalkanPada: null, alasanBatal: null, ...o,
+    ...(o.item === undefined && o.total ? { item: [{ menuId: 'm', nama: 'Menu', harga: o.total, jumlah: 1 }] } : {}),
   };
 }
 function pengeluaran(o: Partial<Pengeluaran>): Pengeluaran {
@@ -111,6 +112,21 @@ describe('Beranda', () => {
     expect(onBuka).toHaveBeenCalledWith({ halaman: 'riwayat', fokus: { id: 's0', tanggal: '2026-11-19' } });
     await user.click(screen.getByRole('button', { name: /Pesanan #3/ }));
     expect(onBuka).toHaveBeenLastCalledWith({ halaman: 'pembatalan', fokus: { id: 'c', tanggal: '2026-11-20' } });
+  });
+
+  it('flags an order whose total does not match its items in red and opens its session', async () => {
+    const user = userEvent.setup();
+    const onBuka = vi.fn();
+    data.pesanan.push(pesanan({
+      id: 'w', nomor: 5, total: 1000, item: [{ menuId: 'lele', nama: 'Pecel Lele', harga: 15000, jumlah: 2 }],
+    }));
+    render(<Beranda sesi={buka} onBuka={onBuka} />);
+    const tombol = (await screen.findByText(
+      'Pesanan #5 (2026-11-20) tidak wajar: total Rp 1.000 tidak sesuai isi pesanan (Rp 30.000).',
+    )).closest('button')!;
+    expect(tombol.className).toContain('border-red-300');
+    await user.click(tombol);
+    expect(onBuka).toHaveBeenCalledWith({ halaman: 'riwayat', fokus: { id: 's1', tanggal: '2026-11-20' } });
   });
 
   it('Muat ulang fetches again; a failed fetch shows Coba lagi', async () => {

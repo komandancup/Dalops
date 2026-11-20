@@ -233,6 +233,15 @@ service cloud.firestore {
           && d.dilunasiPada == request.time;
       }
 
+      function barisValid(b) {
+        return b is map
+          && kunciPersis(b, ['menuId', 'nama', 'harga', 'jumlah'])
+          && b.menuId is string
+          && b.nama is string
+          && rupiahPositif(b.harga)
+          && b.jumlah is int && b.jumlah > 0;
+      }
+
       function pesananBaruValid() {
         let d = request.resource.data;
         let sebelum = sesi(d.sesiKasId).data;
@@ -247,7 +256,11 @@ service cloud.firestore {
           && d.tanggal == sebelum.tanggal
           && d.label is string
           && d.catatan is string
-          && d.item is list && d.item.size() > 0 && d.item.size() <= 50
+          && d.item is list && d.item.size() > 0 && d.item.size() <= 30
+          // Aturan tidak bisa mengulang daftar: baris pertama dicek di sini, sisanya dijumlah ulang di
+          // peringatan pemilik (pesanan_tidak_wajar). Pesanan satu baris harus pas total = harga × jumlah.
+          && barisValid(d.item[0])
+          && (d.item.size() > 1 || d.total == d.item[0].harga * d.item[0].jumlah)
           && rupiahPositif(d.total)
           && d.jumlahCetak == 0
           && pelakuSaya(d.dibuatOleh)

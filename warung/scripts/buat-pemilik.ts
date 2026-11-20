@@ -2,7 +2,7 @@
 import { cert, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { emailDariUsername, usernameValid } from '../src/data/auth';
+import { emailDariUsername, usernameValid } from '../src/lib/username';
 
 async function main() {
   const [usernameMentah, password, ...sisa] = process.argv.slice(2);

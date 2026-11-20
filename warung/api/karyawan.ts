@@ -8,8 +8,14 @@ import type { Pengguna } from '../src/types';
 interface Req { method?: string; headers: Record<string, string | string[] | undefined>; body?: unknown }
 interface Res { status(code: number): Res; json(body: unknown): void }
 
-if (getApps().length === 0) {
-  initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT ?? '{}')) });
+function siapkanAdmin(): boolean {
+  if (getApps().length > 0) return true;
+  try {
+    initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT ?? '')) });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const deps: KaryawanDeps = {
@@ -28,6 +34,9 @@ const deps: KaryawanDeps = {
   async nonaktifkan(uid) {
     await getAuth().updateUser(uid, { disabled: true });
   },
+  async hapusAkun(uid) {
+    await getAuth().deleteUser(uid);
+  },
   async simpanPengguna(p) {
     // Document id is the uid; stored fields match the exact key set in firestore.rules.
     await getFirestore().doc(`users/${p.uid}`).set({ nama: p.nama, username: p.username, peran: p.peran, aktif: p.aktif });
@@ -37,6 +46,10 @@ const deps: KaryawanDeps = {
 export default async function handler(req: Req, res: Res): Promise<void> {
   if (req.method !== 'POST') {
     res.status(400).json({ ok: false, pesan: 'Permintaan tidak valid.' });
+    return;
+  }
+  if (!siapkanAdmin()) {
+    res.status(500).json({ ok: false, pesan: 'Server belum dikonfigurasi (FIREBASE_SERVICE_ACCOUNT).' });
     return;
   }
   const h = req.headers.authorization;

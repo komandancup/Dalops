@@ -13,6 +13,7 @@ function buatDeps(caller: Pengguna | null = pemilik) {
     setPassword: vi.fn(async () => {}),
     nonaktifkan: vi.fn(async () => {}),
     simpanPengguna: vi.fn(async () => {}),
+    hapusAkun: vi.fn(async () => {}),
   };
 }
 
@@ -65,6 +66,13 @@ describe('prosesKaryawan', () => {
     const r = await prosesKaryawan({ aksi: 'buat', nama: 'Siti', username: 'siti', password: 'abcdef' }, 't', d);
     expect(r).toEqual({ status: 400, body: { ok: false, pesan: 'Username sudah dipakai.' } });
     expect(d.simpanPengguna).not.toHaveBeenCalled();
+  });
+  it('rolls back the auth account when saving the profile fails', async () => {
+    const d = buatDeps();
+    d.simpanPengguna.mockRejectedValue(new Error('boom'));
+    const r = await prosesKaryawan({ aksi: 'buat', nama: 'Siti', username: 'siti', password: 'abcdef' }, 't', d);
+    expect(r).toEqual({ status: 500, body: { ok: false, pesan: 'Gagal menyimpan data karyawan. Coba lagi.' } });
+    expect(d.hapusAkun).toHaveBeenCalledWith('baru1');
   });
   it('reset sets password', async () => {
     const d = buatDeps();

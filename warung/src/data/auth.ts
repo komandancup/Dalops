@@ -1,17 +1,12 @@
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type Auth } from 'firebase/auth';
 import { doc, onSnapshot, type Firestore, type Unsubscribe } from 'firebase/firestore';
 import type { Pengguna } from '../types';
+import { emailDariUsername, usernameValid } from '../lib/username';
 
 const SALAH = 'Username atau kata sandi salah.';
 const KODE_SALAH = ['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-email'];
 
-export function emailDariUsername(u: string): string {
-  return `${u}@warung.app`;
-}
-
-export function usernameValid(u: string): boolean {
-  return /^[a-z0-9_]{3,20}$/.test(u);
-}
+export { emailDariUsername, usernameValid };
 
 export async function masuk(auth: Auth, username: string, password: string): Promise<void> {
   const u = username.trim().toLowerCase();
@@ -60,7 +55,10 @@ export function pantauPengguna(auth: Auth, db: Firestore, cb: (p: Pengguna | nul
         }
         cb({ uid: user.uid, nama: d.nama, username: d.username, peran: d.peran, aktif: d.aktif });
       },
-      () => tolak(),
+      (err) => {
+        if ((err as { code?: string }).code === 'permission-denied') tolak();
+        else console.error('pantauPengguna:', err);
+      },
     );
   });
   return () => {

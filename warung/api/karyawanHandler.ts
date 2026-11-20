@@ -1,4 +1,4 @@
-import { emailDariUsername, usernameValid } from '../src/data/auth';
+import { emailDariUsername, usernameValid } from '../src/lib/username';
 import type { Pengguna } from '../src/types';
 
 export interface KaryawanDeps {
@@ -8,6 +8,7 @@ export interface KaryawanDeps {
   setPassword(uid: string, pw: string): Promise<void>;
   nonaktifkan(uid: string): Promise<void>;
   simpanPengguna(p: Pengguna): Promise<void>;
+  hapusAkun(uid: string): Promise<void>;
 }
 export interface KaryawanHasil {
   status: number;
@@ -45,7 +46,12 @@ export async function prosesKaryawan(body: unknown, idToken: string | null, deps
       if ((e as { code?: string }).code === 'auth/email-already-exists') return gagal(400, 'Username sudah dipakai.');
       throw e;
     }
-    await deps.simpanPengguna({ uid, nama: b.nama.trim(), username, peran: 'karyawan', aktif: true });
+    try {
+      await deps.simpanPengguna({ uid, nama: b.nama.trim(), username, peran: 'karyawan', aktif: true });
+    } catch {
+      await deps.hapusAkun(uid).catch(() => {});
+      return gagal(500, 'Gagal menyimpan data karyawan. Coba lagi.');
+    }
     return { status: 200, body: { ok: true, uid } };
   }
 

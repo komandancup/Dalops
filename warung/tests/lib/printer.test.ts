@@ -81,6 +81,25 @@ describe('cetakPesanan', () => {
     expect(m.catatCetak).not.toHaveBeenCalled();
   });
 
+  it('kalau struk tercetak tapi gagal dicatat, cetak berikutnya tetap SALINAN dan catatan yang tertinggal diulang', async () => {
+    m.catatCetak.mockRejectedValueOnce(Object.assign(new Error('Firebase: offline'), { code: 'unavailable' }));
+    const p = buat({ id: 'p-sinyal' });
+    await expect(cetakPesanan(p, 'Warung')).rejects.toThrow('offline');
+    expect(m.plugin.write.mock.calls[0][0].value).not.toContain('SALINAN');
+
+    // Same stale order (jumlahCetak still 0): the paper already went out once.
+    await cetakPesanan(p, 'Warung');
+    expect(m.plugin.write.mock.calls[1][0].value).toContain('SALINAN');
+    // One record for the earlier print that was not saved, one for this print.
+    expect(m.catatCetak).toHaveBeenCalledTimes(3);
+    expect(m.catatCetak).toHaveBeenLastCalledWith({ palsu: true }, 'p-sinyal');
+
+    // All recorded now: a later print of the fresh order (jumlahCetak 2) records exactly once more.
+    m.catatCetak.mockClear();
+    await cetakPesanan(buat({ id: 'p-sinyal', jumlahCetak: 2 }), 'Warung');
+    expect(m.catatCetak).toHaveBeenCalledTimes(1);
+  });
+
   it('kalau belum memilih printer, minta pilih dulu', async () => {
     simpanan();
     await expect(cetakPesanan(buat(), 'Warung')).rejects.toThrow('Belum ada printer. Pilih printer di Pengaturan Printer.');

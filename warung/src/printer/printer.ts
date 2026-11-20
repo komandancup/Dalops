@@ -134,13 +134,26 @@ async function kirim(baris: string[]): Promise<void> {
 }
 
 /**
+ * Prints that came out of the printer but whose jumlahCetak +1 did not reach the database yet
+ * (e.g. the signal dropped), per order id. Kept for the life of the app so a retry still says SALINAN.
+ */
+const belumDicatat = new Map<string, number>();
+
+/**
  * Prints the receipt of a paid order and records the print (jumlahCetak +1). Any reprint says SALINAN.
- * Nothing is recorded when printing fails.
+ * Nothing is recorded when printing fails. A print whose record failed is recorded on the next try.
  */
 export async function cetakPesanan(p: Pesanan, namaWarung: string): Promise<void> {
   if (!bolehCetak(p)) throw new Error('Struk hanya untuk pesanan lunas.');
-  await kirim(barisStruk(p, namaWarung, p.jumlahCetak > 0));
-  await catatCetak(db, p.id);
+  const tertunda = belumDicatat.get(p.id) ?? 0;
+  await kirim(barisStruk(p, namaWarung, p.jumlahCetak > 0 || tertunda > 0));
+  belumDicatat.set(p.id, tertunda + 1);
+  while ((belumDicatat.get(p.id) ?? 0) > 0) {
+    await catatCetak(db, p.id); // a failure leaves the rest in belumDicatat
+    const sisa = (belumDicatat.get(p.id) ?? 1) - 1;
+    if (sisa > 0) belumDicatat.set(p.id, sisa);
+    else belumDicatat.delete(p.id);
+  }
 }
 
 /** Prints a sample receipt to check the printer. Not an order, so nothing is recorded. */

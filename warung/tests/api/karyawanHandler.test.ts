@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { prosesKaryawan } from '../../api/karyawanHandler';
+import { prosesKaryawan } from '../../api/_lib/karyawanHandler.js';
 import type { Pengguna } from '../../src/types';
 
 const pemilik: Pengguna = { uid: 'o1', nama: 'Ibu', username: 'ibu', peran: 'pemilik', aktif: true };

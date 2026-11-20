@@ -1,5 +1,5 @@
-import { emailDariUsername, usernameValid } from '../src/lib/username';
-import type { Pengguna } from '../src/types';
+import { emailDariUsername, usernameValid } from '../../src/lib/username.js';
+import type { Pengguna } from '../../src/types.js';
 
 export interface KaryawanDeps {
   verifikasiToken(t: string): Promise<{ uid: string }>;

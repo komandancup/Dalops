@@ -1,8 +1,8 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { prosesKaryawan, type KaryawanDeps } from './karyawanHandler';
-import type { Pengguna } from '../src/types';
+import { prosesKaryawan, type KaryawanDeps } from './_lib/karyawanHandler.js';
+import type { Pengguna } from '../src/types.js';
 
 // Vercel Node handler (types kept loose on purpose; no @vercel/node dependency).
 interface Req { method?: string; headers: Record<string, string | string[] | undefined>; body?: unknown }

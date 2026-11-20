@@ -12,7 +12,7 @@ import Tombol from '../komponen/Tombol';
 import { LayarGalat, LayarMemuat } from '../Status';
 import { usePantau } from '../usePantau';
 
-// Same wording as api/karyawanHandler.ts.
+// Same wording as api/_lib/karyawanHandler.ts.
 const MIN_SANDI = 6;
 export const PESAN_SANDI = `Kata sandi minimal ${MIN_SANDI} karakter.`;
 export const PESAN_USERNAME = 'Username hanya huruf kecil, angka, _ (3–20 karakter).';

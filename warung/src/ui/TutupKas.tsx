@@ -12,12 +12,15 @@ import Tombol from './komponen/Tombol';
 import { KasBelumDibuka, LayarGalat, LayarMemuat } from './Status';
 import { usePantau } from './usePantau';
 
-interface Hasil { sesiId: string; disetor: number; ditinggal: number }
+export interface HasilTutup { sesiId: string; disetor: number; ditinggal: number }
 
-/** Close-session screen for the open session (blind count first); after closing it shows what to hand over. */
-export default function TutupKas({ pengguna, sesi }: { pengguna: Pengguna; sesi: SesiKas | null }) {
-  const [hasil, setHasil] = useState<Hasil | null>(null);
-
+/**
+ * Close-session screen for the open session (blind count first); after closing it shows what to hand over.
+ * The last close result is kept by the parent so the message survives a tab switch.
+ */
+export default function TutupKas({ pengguna, sesi, hasil, onSelesai }: {
+  pengguna: Pengguna; sesi: SesiKas | null; hasil: HasilTutup | null; onSelesai(h: HasilTutup): void;
+}) {
   if (hasil && (!sesi || sesi.id === hasil.sesiId)) {
     return (
       <div role="status" className="mx-auto flex max-w-lg flex-col gap-2 p-6 text-center">
@@ -29,7 +32,7 @@ export default function TutupKas({ pengguna, sesi }: { pengguna: Pengguna; sesi:
     );
   }
   if (!sesi) return <KasBelumDibuka />;
-  return <FormTutup key={sesi.id} pengguna={pengguna} sesi={sesi} onSelesai={setHasil} />;
+  return <FormTutup key={sesi.id} pengguna={pengguna} sesi={sesi} onSelesai={onSelesai} />;
 }
 
 function Baris({ label, nilai, tebal }: { label: string; nilai: string; tebal?: boolean }) {
@@ -47,7 +50,7 @@ function Selisih({ nilai }: { nilai: number }) {
   );
 }
 
-function FormTutup({ pengguna, sesi, onSelesai }: { pengguna: Pengguna; sesi: SesiKas; onSelesai(h: Hasil): void }) {
+function FormTutup({ pengguna, sesi, onSelesai }: { pengguna: Pengguna; sesi: SesiKas; onSelesai(h: HasilTutup): void }) {
   const pesanan = usePantau<Pesanan[]>((cb, onError) => pantauPesananSesi(db, sesi.id, cb, onError), sesi.id);
   const pengeluaran = usePantau<Pengeluaran[]>((cb, onError) => pantauPengeluaranSesi(db, sesi.id, cb, onError), sesi.id);
 

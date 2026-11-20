@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import type { Pengeluaran, Pengguna, Pesanan, SesiKas } from '../../src/types';
 
 const m = vi.hoisted(() => ({
@@ -28,7 +29,13 @@ vi.mock('../../src/data/pengeluaran', () => ({
   },
 }));
 
-import TutupKas from '../../src/ui/TutupKas';
+import TutupKas, { type HasilTutup } from '../../src/ui/TutupKas';
+
+/** Holds the close result the way App does. */
+function Uji(props: { pengguna: Pengguna; sesi: SesiKas | null }) {
+  const [hasil, setHasil] = useState<HasilTutup | null>(null);
+  return <TutupKas {...props} hasil={hasil} onSelesai={setHasil} />;
+}
 
 const pengguna: Pengguna = { uid: 'u1', nama: 'Sari', username: 'sari', peran: 'karyawan', aktif: true };
 const sesi = { id: 's1', status: 'buka', tanggal: '2026-11-20', modalAwal: 100000 } as SesiKas;
@@ -58,7 +65,7 @@ const tombolTutup = () => screen.getByRole('button', { name: 'Tutup Kas' });
 describe('TutupKas', () => {
   it('blind count: hides the expected figures until both counts are entered, then shows them with the selisih', async () => {
     const user = userEvent.setup();
-    render(<TutupKas pengguna={pengguna} sesi={sesi} />);
+    render(<Uji pengguna={pengguna} sesi={sesi} />);
     // Nothing that gives away the target before counting.
     for (const t of ['Uang tunai seharusnya', 'Modal awal', 'Penjualan tunai', 'Pengeluaran dari laci']) {
       expect(screen.queryByText(t)).toBeNull();
@@ -116,14 +123,14 @@ describe('TutupKas', () => {
     m.pesanan.push(pesanan({ id: 'd', total: 5000, status: 'belum_bayar', caraBayar: null }));
     m.tutupSesi.mockRejectedValue(new Error('Ada pesanan baru masuk. Coba tutup kas lagi.'));
     const user = userEvent.setup();
-    const { rerender } = render(<TutupKas pengguna={pengguna} sesi={sesi} />);
+    const { rerender } = render(<Uji pengguna={pengguna} sesi={sesi} />);
     await user.type(screen.getByLabelText('Uang tunai dihitung'), '112000');
     await user.type(screen.getByLabelText('Total QRIS di aplikasi merchant'), '15000');
     expect(screen.getByText('Masih ada 1 pesanan belum bayar. Lunasi atau batalkan dulu.')).toBeTruthy();
     expect(tombolTutup()).toHaveProperty('disabled', true);
 
     m.pesanan = m.pesanan.slice(0, 3);
-    rerender(<TutupKas key="baru" pengguna={pengguna} sesi={sesi} />);
+    rerender(<Uji key="baru" pengguna={pengguna} sesi={sesi} />);
     await user.type(screen.getByLabelText('Uang tunai dihitung'), '112000');
     await user.type(screen.getByLabelText('Total QRIS di aplikasi merchant'), '15000');
     expect(screen.queryByRole('alert')).toBeNull();
@@ -134,7 +141,7 @@ describe('TutupKas', () => {
   it('shows a listener error with Coba lagi that re-subscribes', async () => {
     m.galatPesanan = Object.assign(new Error('Firebase: x'), { code: 'unavailable' });
     const user = userEvent.setup();
-    render(<TutupKas pengguna={pengguna} sesi={sesi} />);
+    render(<Uji pengguna={pengguna} sesi={sesi} />);
     expect(screen.getByText('Tidak ada internet. Periksa sambungan lalu coba lagi.')).toBeTruthy();
     m.galatPesanan = null;
     await act(() => user.click(screen.getByRole('button', { name: 'Coba lagi' })));
@@ -143,7 +150,7 @@ describe('TutupKas', () => {
   });
 
   it('says so when no session is open', () => {
-    render(<TutupKas pengguna={pengguna} sesi={null} />);
+    render(<Uji pengguna={pengguna} sesi={null} />);
     expect(screen.getByText('Kas belum dibuka.')).toBeTruthy();
   });
 });

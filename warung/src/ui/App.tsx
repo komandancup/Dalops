@@ -15,7 +15,7 @@ import PengaturanPrinter from './PengaturanPrinter';
 import Beranda from './pemilik/Beranda';
 import Lainnya, { type Tujuan } from './pemilik/Lainnya';
 import { LayarGalat, LayarMemuat } from './Status';
-import TutupKas from './TutupKas';
+import TutupKas, { type HasilTutup } from './TutupKas';
 
 export default function App() {
   const [pengguna, setPengguna] = useState<Pengguna | null | undefined>(undefined);
@@ -54,6 +54,7 @@ function Utama({ pengguna }: { pengguna: Pengguna }) {
   const [sesi, setSesi] = useState<SesiKas | null | undefined>(undefined);
   const [galatSesi, setGalatSesi] = useState<string | null>(null);
   const [muatKe, setMuatKe] = useState(0);
+  const [hasilTutup, setHasilTutup] = useState<HasilTutup | null>(null);
 
   useEffect(() => {
     ambilPengaturan(db).then((p) => setNamaWarung(p.namaWarung)).catch(() => {}); // header falls back to "Warung"
@@ -78,7 +79,7 @@ function Utama({ pengguna }: { pengguna: Pengguna }) {
   if (tab === 'pesanan') lain = isiSesi((s) => <DaftarPesanan pengguna={pengguna} sesi={s} namaWarung={namaWarung} />);
   else if (tab === 'pengeluaran') lain = isiSesi((s) => <Pengeluaran pengguna={pengguna} sesi={s} />);
   else if (tab === 'printer') lain = <PengaturanPrinter namaWarung={namaWarung} />;
-  else if (tab === 'tutup') lain = isiSesi((s) => <TutupKas pengguna={pengguna} sesi={s} />);
+  else if (tab === 'tutup') lain = isiSesi((s) => <TutupKas pengguna={pengguna} sesi={s} hasil={hasilTutup} onSelesai={setHasilTutup} />);
   else if (tab === 'beranda') {
     lain = isiSesi((s) => (
       <Beranda key={s?.id ?? 'tutup'} sesi={s} onBuka={(t) => { setTujuan(t); setTab('lainnya'); }} />

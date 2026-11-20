@@ -1,7 +1,7 @@
 # Desain: Aplikasi Pencatatan Warung Pecel Lele & Ayam Penyet
 
 Tanggal: 2026-11-20
-Status: Draf, menunggu persetujuan pemilik
+Status: Disetujui pemilik (2026-11-20)
 
 ## 1. Maksud dan alasan
 
@@ -27,13 +27,13 @@ Inti desain ini adalah angka yang bisa dipercaya. Data yang sudah tersimpan tida
 - Setiap shift ada **buka kas** dan **tutup kas**. Saat tutup kas, uang tunai dihitung, jumlah QRIS dicocokkan, lalu dicatat berapa yang disetor ke pemilik dan berapa yang ditinggal di laci. Aplikasi menampilkan selisih dari setiap pencocokan.
 - Pemilik melihat ringkasan hari ini, rekap mingguan/bulanan, menu terlaris, perkiraan untung, pembatalan, dan riwayat kas.
 - Pemilik mengelola menu, harga, akun karyawan, dan QRIS warung.
+- **Cetak struk** ke printer thermal Bluetooth 58 mm dari aplikasi Android.
 
 ### Bukan sasaran (tidak dibuat di versi 1)
 - Stok bahan baku per item. Belanja bahan cukup dicatat sebagai pengeluaran.
 - **Konfirmasi QRIS otomatis.** Untuk ini dibutuhkan payment gateway berbayar (Midtrans/Xendit). Di versi 1, karyawan menandai lunas secara manual setelah melihat notifikasi di aplikasi merchant QRIS.
 - Pembayaran transfer bank.
-- Kasbon (hutang pelanggan yang dibayar di hari lain).
-- Cetak struk atau printer Bluetooth.
+- Kasbon (hutang pelanggan yang dibayar di hari lain). Pemilik menegaskan tidak ada kasbon.
 - Banyak cabang. Desain dibuat untuk satu warung, tetapi struktur data tidak menutup kemungkinan cabang di kemudian hari.
 - Absensi atau gaji karyawan.
 - Mode offline. Sinyal di warung stabil.
@@ -75,6 +75,7 @@ Inti desain ini adalah angka yang bisa dipercaya. Data yang sudah tersimpan tida
 - Ada status "Belum bayar" untuk pembeli yang makan dulu baru bayar. Semua pesanan harus lunas atau dibatalkan sebelum tutup kas. Tidak ada kasbon lintas hari.
 - **Hari kerja dihitung per sesi kas**, dari buka kas sampai tutup kas. Pesanan pukul 00.30 tetap masuk ke sesi yang sedang berjalan. Jika ada pergantian shift, setiap shift membuka dan menutup kasnya sendiri.
 - Saat tutup kas, karyawan mencatat **uang yang disetor** dan **uang yang ditinggal di laci**. Modal awal sesi berikutnya otomatis terisi dari uang yang ditinggal. Jika karyawan mengubah angka itu, aplikasi menandainya ke pemilik.
+- Struk bisa dicetak. Kasbon tetap tidak ada.
 - Karyawan boleh membatalkan pesanan, termasuk yang sudah lunas, dengan alasan wajib. Setiap pembatalan **langsung muncul sebagai peringatan** di beranda pemilik. Pembatalan tidak memerlukan persetujuan pemilik.
 
 ### Keputusan pembuat (pemilik bisa mengoreksi)
@@ -84,6 +85,7 @@ Inti desain ini adalah angka yang bisa dipercaya. Data yang sudah tersimpan tida
 - **Peran:** `pemilik` dan `karyawan`, disimpan di koleksi `users` dan diperiksa oleh Firestore Security Rules.
 - **Pengeluaran oleh pemilik:** pemilik bisa mencatat pengeluaran kapan saja, tanpa sesi kas, misalnya belanja yang dibayar langsung. Pengeluaran ini dihitung dalam laba tetapi tidak memengaruhi hitungan uang laci.
 - **Kas yang sudah ditutup** tidak bisa diubah. Jika ada kesalahan yang baru ketahuan belakangan, pemilik menambahkan **catatan koreksi** (berisi teks dan nominal penyesuaian, boleh nol). Catatan ini ditampilkan di samping sesi tersebut dan nominalnya ikut dihitung di rekap.
+- **Printer struk:** printer thermal Bluetooth 58 mm (ESC/POS), jenis yang umum dipakai warung. Cetak berjalan lewat plugin Bluetooth Capacitor di APK. Plugin native tetap bisa dipanggil walaupun halamannya dimuat dari Vercel, karena plugin itu tertanam di APK. Di browser biasa (tanpa APK), tombol cetak memakai cetak bawaan browser sebagai cadangan. Printer dipasangkan sekali di menu Pengaturan pada HP karyawan.
 - **Kode QRIS dinamis** ditulis ulang sendiri, sekitar 50 baris TypeScript, dengan atribusi MIT. Library tersebut tidak dipasang sebagai dependency. Ada tambahan pengaman: jika QRIS tidak memiliki tag 58 atau nominal tidak valid, aplikasi menolak dan menampilkan pesan, bukan diam-diam menghasilkan QR tanpa nominal.
 
 ## 6. Fitur
@@ -104,6 +106,12 @@ Inti desain ini adalah angka yang bisa dipercaya. Data yang sudah tersimpan tida
     - **QRIS:** layar penuh menampilkan QR bernominal dan total dalam huruf besar. Setelah notifikasi di aplikasi merchant masuk, karyawan menekan **"Sudah masuk, tandai lunas"**. Tersedia juga tombol "Batal/ganti ke tunai".
   - **Belum bayar:** pesanan masuk ke daftar "Belum bayar" dan bisa dilunasi nanti dengan alur yang sama.
 - Pesanan yang sudah tersimpan **tidak bisa diedit**. Jika salah, pesanan **dibatalkan dengan alasan wajib**, lalu dibuat pesanan baru.
+
+**Cetak struk**
+- Setelah pesanan lunas, muncul tombol **Cetak struk**. Pilihan "cetak otomatis saat lunas" bisa diaktifkan di Pengaturan HP.
+- Isi struk: nama warung, tanggal & jam, nomor pesanan, label, item (jumlah × harga), total, cara bayar, uang diterima & kembalian (tunai), nama kasir, dan "Terima kasih".
+- Struk untuk pesanan yang belum lunas atau sudah dibatalkan tidak bisa dicetak.
+- Cetak ulang diizinkan dan diberi tanda **SALINAN**. Jumlah cetak tercatat di pesanan (`jumlahCetak`) dan terlihat oleh pemilik.
 
 **Daftar pesanan sesi ini**
 - Menampilkan status (Belum bayar / Lunas / Batal), total, cara bayar, dan pencatat.
@@ -150,7 +158,7 @@ Nominal disimpan dalam rupiah bilangan bulat. Waktu memakai `serverTimestamp()`.
 - `pengaturan/warung`: `namaWarung`, `qrisStatis` (string), `namaMerchant`
 - `menu/{id}`: `nama`, `harga`, `kategori`, `aktif`, `urutan`
 - `sesiKas/{id}`: `tanggal`, `status` (`buka`|`tutup`), `dibukaOleh`, `dibukaPada`, `modalAwal`, `modalSaran`, `alasanUbahModal`, `ditutupOleh`, `ditutupPada`, `tunaiSeharusnya`, `tunaiDihitung`, `selisihTunai`, `qrisAplikasi`, `qrisMerchant`, `selisihQris`, `disetor`, `ditinggal`, `catatan`
-- `pesanan/{id}`: `sesiKasId`, `tanggal`, `label`, `catatan`, `item[]` (`menuId`, `nama`, `harga`, `jumlah`), `total`, `status` (`belum_bayar`|`lunas`|`batal`), `caraBayar` (`tunai`|`qris`), `uangDiterima`, `dibuatOleh`, `dibuatPada`, `dilunasiOleh`, `dilunasiPada`, `dibatalkanOleh`, `dibatalkanPada`, `alasanBatal`
+- `pesanan/{id}`: `sesiKasId`, `tanggal`, `label`, `catatan`, `item[]` (`menuId`, `nama`, `harga`, `jumlah`), `total`, `status` (`belum_bayar`|`lunas`|`batal`), `caraBayar` (`tunai`|`qris`), `uangDiterima`, `dibuatOleh`, `dibuatPada`, `dilunasiOleh`, `dilunasiPada`, `dibatalkanOleh`, `dibatalkanPada`, `alasanBatal`, `nomor` (urut per sesi), `jumlahCetak`
 - `pengeluaran/{id}`: `sesiKasId` (kosong jika dicatat pemilik di luar sesi), `tanggal`, `kategori`, `keterangan`, `nominal`, `dariLaci`, `status` (`aktif`|`batal`), `dibuatOleh`, `dibuatPada`, `dibatalkanOleh`, `dibatalkanPada`, `alasanBatal`
 - `koreksi/{id}`: `sesiKasId`, `tanggal`, `nominal`, `catatan`, `dibuatOleh`, `dibuatPada`
 
@@ -162,7 +170,7 @@ Aturan berikut dijaga oleh **Firestore Security Rules di server**:
 
 - Tidak ada yang bisa **menghapus** `pesanan`, `pengeluaran`, `sesiKas`, atau `koreksi`, termasuk pemilik.
 - Karyawan aktif boleh **membuat** pesanan dan pengeluaran hanya di sesi yang berstatus `buka`, dan `dibuatOleh` harus berisi akunnya sendiri.
-- Perubahan pesanan yang diizinkan hanya `belum_bayar → lunas` (dengan `caraBayar`) dan `belum_bayar|lunas → batal` (dengan alasan wajib). Item, total, dan harga tidak boleh berubah.
+- Perubahan pesanan yang diizinkan hanya `belum_bayar → lunas` (dengan `caraBayar`) dan `belum_bayar|lunas → batal` (dengan alasan wajib). Item, total, dan harga tidak boleh berubah. `jumlahCetak` hanya boleh bertambah 1.
 - `total` = jumlah dari `harga × jumlah` per item. Ini divalidasi di aplikasi, dan di rules sejauh memungkinkan.
 - Sesi berstatus `tutup` tidak bisa diubah. Hanya boleh ada satu sesi berstatus `buka` (dijaga lewat dokumen penanda `pengaturan/sesiAktif`).
 - Hanya pemilik yang bisa menulis `menu`, `users`, `pengaturan/warung`, `koreksi`, dan pengeluaran di luar sesi.
@@ -181,6 +189,6 @@ Langkah yang membutuhkan akun pemilik (Firebase, Vercel) dikerjakan oleh pemilik
 ## 10. Diserahkan kepada pembuat
 - Struktur folder, komponen, dan penamaan kode.
 - Detail tampilan, dengan patokan: tombol besar, kontras tinggi, dan nyaman di layar kecil.
-- Library grafik dan library pembuat gambar QR.
+- Library grafik, library pembuat gambar QR, dan plugin Bluetooth/ESC-POS yang dipakai.
 - Strategi pengujian, termasuk pengujian Security Rules dengan Firebase Emulator dan uji konversi QRIS terhadap contoh dari repo qris-dinamis.
 - Cara membuat akun karyawan tanpa server (instance Firebase App kedua) atau dengan fungsi kecil di Vercel.

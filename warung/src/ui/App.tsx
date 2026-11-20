@@ -1,19 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { auth, db } from '../firebase';
 import { keluar, pantauPengguna } from '../data/auth';
 import { ambilPengaturan } from '../data/pengaturan';
 import { pantauSesiAktif } from '../data/sesi';
 import type { Pengguna, SesiKas } from '../types';
 import BukaKas from './BukaKas';
+import DaftarPesanan from './DaftarPesanan';
 import { pesanGalat } from './galat';
 import Kasir from './Kasir';
 import Kerangka, { tabAwal, type Tab } from './Kerangka';
 import Masuk from './Masuk';
+import Pengeluaran from './Pengeluaran';
 import { LayarGalat, LayarMemuat, SegeraHadir } from './Status';
-
-const JUDUL: Record<Exclude<Tab, 'kasir'>, string> = {
-  beranda: 'Beranda', pesanan: 'Pesanan', pengeluaran: 'Pengeluaran', tutup: 'Tutup Kas', lainnya: 'Lainnya',
-};
+import TutupKas from './TutupKas';
 
 export default function App() {
   const [pengguna, setPengguna] = useState<Pengguna | null | undefined>(undefined);
@@ -62,17 +61,26 @@ function Utama({ pengguna }: { pengguna: Pengguna }) {
     return pantauSesiAktif(db, setSesi, (e) => setGalatSesi(pesanGalat(e)));
   }, [muatKe]);
 
+  // Every session-bound tab waits for the session listener and shares its error state.
+  const isiSesi = (isi: (s: SesiKas | null) => ReactNode) => {
+    if (galatSesi) return <LayarGalat pesan={galatSesi} onCobaLagi={() => setMuatKe((n) => n + 1)} />;
+    if (sesi === undefined) return <LayarMemuat />;
+    return isi(sesi);
+  };
+
   // Kasir stays mounted while other tabs are shown so a half-built cart survives a tab switch.
-  let kasir;
-  if (galatSesi) kasir = <LayarGalat pesan={galatSesi} onCobaLagi={() => setMuatKe((n) => n + 1)} />;
-  else if (sesi === undefined) kasir = <LayarMemuat />;
-  else if (sesi === null) kasir = <BukaKas pengguna={pengguna} />;
-  else kasir = <Kasir key={sesi.id} pengguna={pengguna} sesi={sesi} />;
+  const kasir = isiSesi((s) => (s ? <Kasir key={s.id} pengguna={pengguna} sesi={s} /> : <BukaKas pengguna={pengguna} />));
+  let lain: ReactNode = null;
+  if (tab === 'pesanan') lain = isiSesi((s) => <DaftarPesanan pengguna={pengguna} sesi={s} namaWarung={namaWarung} />);
+  else if (tab === 'pengeluaran') lain = isiSesi((s) => <Pengeluaran pengguna={pengguna} sesi={s} />);
+  else if (tab === 'tutup') lain = isiSesi((s) => <TutupKas pengguna={pengguna} sesi={s} />);
+  else if (tab === 'beranda') lain = <SegeraHadir judul="Beranda" />;
+  else if (tab === 'lainnya') lain = <SegeraHadir judul="Lainnya" />;
 
   return (
     <Kerangka namaWarung={namaWarung} pengguna={pengguna} tab={tab} onTab={setTab} onKeluar={() => void keluar(auth).catch(() => {})}>
       <div hidden={tab !== 'kasir'} className="min-h-full">{kasir}</div>
-      {tab !== 'kasir' && <SegeraHadir judul={JUDUL[tab]} />}
+      {lain}
     </Kerangka>
   );
 }

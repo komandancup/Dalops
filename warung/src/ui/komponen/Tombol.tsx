@@ -4,6 +4,8 @@ const GAYA = {
   utama: 'bg-orange-700 text-white active:bg-orange-800',
   kedua: 'bg-white text-stone-900 border-2 border-stone-300 active:bg-stone-100',
   bahaya: 'bg-red-700 text-white active:bg-red-800',
+  /** Secondary button that starts a cancellation. */
+  batal: 'bg-white text-red-800 border-2 border-red-300 active:bg-red-50',
 } as const;
 
 interface Props {

@@ -6,7 +6,7 @@ import { doc, getDoc, setDoc, Timestamp, type Firestore } from 'firebase/firesto
 import type { Menu } from '../../src/types';
 import { ambilPeriode, ambilSesiAktif, bukaSesi, pantauSesiAktif, tutupSesi } from '../../src/data/sesi';
 import { batalkanPesanan, buatPesanan, catatCetak, lunasiPesanan } from '../../src/data/pesanan';
-import { batalkanPengeluaran, catatPengeluaran } from '../../src/data/pengeluaran';
+import { batalkanPengeluaran, catatPengeluaran, pantauPengeluaranSesi } from '../../src/data/pengeluaran';
 import { tambahKoreksi } from '../../src/data/koreksi';
 import { ambilPengaturan, simpanPengaturan } from '../../src/data/pengaturan';
 import { pantauMenu } from '../../src/data/menu';
@@ -200,6 +200,34 @@ describe('alur shift', () => {
     await tutupSesi(d, BUDI, sesi.id, { tunaiDihitung: 100000, qrisMerchant: 0, disetor: 50000, ditinggal: 50000, catatan: '' });
     await vi.waitFor(() => expect(dilihat.at(-1)).toBe(null));
     lepas();
+  });
+
+  it('pantauPengeluaranSesi follows only the session expenses, newest first, and reports errors', async () => {
+    const d = db('budi');
+    const sesi = await bukaSesi(d, BUDI, 100000, null);
+    await catatPengeluaran(db('owner'), OWNER, { sesiKasId: null, kategori: 'Gas', keterangan: 'luar sesi', nominal: 22000, dariLaci: false });
+    const dilihat: { keterangan: string; status: string }[][] = [];
+    const lepas = pantauPengeluaranSesi(d, sesi.id, (l) => dilihat.push(l.map((e) => ({ keterangan: e.keterangan, status: e.status }))));
+    await vi.waitFor(() => expect(dilihat.at(-1)).toEqual([]));
+    await catatPengeluaran(d, BUDI, { sesiKasId: sesi.id, kategori: 'Minyak', keterangan: 'pertama', nominal: 30000, dariLaci: true });
+    await vi.waitFor(() => expect(dilihat.at(-1)?.map((e) => e.keterangan)).toEqual(['pertama']));
+    await new Promise((r) => setTimeout(r, 5)); // distinct dibuatPada
+    await catatPengeluaran(d, BUDI, { sesiKasId: sesi.id, kategori: 'Gas', keterangan: 'kedua', nominal: 20000, dariLaci: true });
+    await vi.waitFor(() => expect(dilihat.at(-1)?.map((e) => e.keterangan)).toEqual(['kedua', 'pertama']));
+    const { pengeluaran } = await ambilPeriode(d, sesi.tanggal, sesi.tanggal);
+    await batalkanPengeluaran(d, BUDI, pengeluaran.find((e) => e.keterangan === 'pertama')!.id, 'salah catat');
+    await vi.waitFor(() => expect(dilihat.at(-1)).toEqual([
+      { keterangan: 'kedua', status: 'aktif' }, { keterangan: 'pertama', status: 'batal' },
+    ]));
+    lepas();
+
+    const cb = vi.fn();
+    const onError = vi.fn();
+    const lepasEks = pantauPengeluaranSesi(db('eks'), sesi.id, cb, onError);
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(cb).not.toHaveBeenCalled();
+    lepasEks();
   });
 
   it('pantauMenu reports errors (inactive user) through onError', async () => {

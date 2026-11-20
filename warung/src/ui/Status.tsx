@@ -21,3 +21,12 @@ export function SegeraHadir({ judul }: { judul: string }) {
     </div>
   );
 }
+
+export function KasBelumDibuka() {
+  return (
+    <div className="mx-auto flex max-w-lg flex-col gap-2 p-6 text-center">
+      <h2 className="text-2xl font-bold text-stone-900">Kas belum dibuka.</h2>
+      <p className="text-lg text-stone-700">Buka kas dulu di menu Kasir.</p>
+    </div>
+  );
+}

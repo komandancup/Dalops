@@ -30,15 +30,16 @@ export default function Bayar({ total, judul = 'Bayar', onBayar, onTutup }: Prop
   const [galat, setGalat] = useState<string | null>(null);
   const [statis, setStatis] = useState<string | null | undefined>(undefined);
 
-  const [galatQris, setGalatQris] = useState<string | null>(null);
+  const [galatMuat, setGalatMuat] = useState<string | null>(null);
   const [muatKe, setMuatKe] = useState(0);
+  const [menyimpan, setMenyimpan] = useState(false);
 
   useEffect(() => {
     let batal = false;
-    setGalatQris(null);
+    setGalatMuat(null);
     ambilPengaturan(db)
       .then((p) => !batal && setStatis(p.qrisStatis))
-      .catch((e) => !batal && setGalatQris(`Gagal memuat QRIS. ${pesanGalat(e)}`));
+      .catch((e) => !batal && setGalatMuat(`Gagal memuat QRIS. ${pesanGalat(e)}`));
     return () => {
       batal = true;
     };
@@ -46,23 +47,25 @@ export default function Bayar({ total, judul = 'Bayar', onBayar, onTutup }: Prop
 
   const simpan = async (bayar: DataBayar) => {
     setGalat(null);
+    setMenyimpan(true);
     try {
       await onBayar(bayar);
     } catch (e) {
       setGalat(pesanGalat(e));
+    } finally {
+      setMenyimpan(false);
     }
   };
-  const pilih = (c: CaraBayar) => {
+  const pilih = (c: CaraBayar | null) => {
     setGalat(null);
     setCara(c);
-    if (c === 'qris' && galatQris) setMuatKe((n) => n + 1); // retry a failed settings load
   };
 
   const kurang = uang !== null && uang < total;
 
   return (
     <>
-      <Dialog judul={judul} onTutup={onTutup}>
+      <Dialog judul={judul} onTutup={onTutup} kunci={menyimpan}>
         <p className="mb-4 text-center text-4xl font-extrabold text-stone-900">{formatRupiah(total)}</p>
         <div className="grid grid-cols-2 gap-3">
           {([['tunai', 'Tunai', Banknote], ['qris', 'QRIS', QrCode]] as const).map(([c, teks, Ikon]) => (
@@ -104,8 +107,12 @@ export default function Bayar({ total, judul = 'Bayar', onBayar, onTutup }: Prop
       {cara === 'qris' && (
         <QrisLayar
           statis={statis}
+          galatMuat={galatMuat}
+          onMuatUlang={() => setMuatKe((n) => n + 1)}
           total={total}
-          galat={galat ?? galatQris}
+          menyimpan={menyimpan}
+          onKembali={() => pilih(null)}
+          galat={galat}
           onLunas={() => simpan({ caraBayar: 'qris', uangDiterima: null })}
           onGantiTunai={() => pilih('tunai')}
         />

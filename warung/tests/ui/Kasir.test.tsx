@@ -107,6 +107,39 @@ describe('Kasir', () => {
     expect(m.buatPesanan.mock.calls[0][4].bayar).toBeNull();
   });
 
+  it('QRIS settings load failure shows the error with Coba lagi that reloads', async () => {
+    m.ambilPengaturan.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'unavailable' }));
+    const user = await isiKeranjang();
+    await user.click(screen.getByRole('button', { name: /Lihat pesanan/ }));
+    await user.click(screen.getByRole('button', { name: 'Bayar Sekarang' }));
+    await user.click(screen.getByRole('button', { name: 'QRIS' }));
+    expect(await screen.findByText(/Gagal memuat QRIS/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Coba lagi' }));
+    expect(await screen.findByText('QRIS warung belum diatur. Minta pemilik mengisi di Pengaturan.')).toBeTruthy();
+    expect(m.ambilPengaturan).toHaveBeenCalledTimes(2);
+  });
+
+  it('Escape on the QRIS screen returns to Bayar instead of closing everything', async () => {
+    const user = await isiKeranjang();
+    await user.click(screen.getByRole('button', { name: /Lihat pesanan/ }));
+    await user.click(screen.getByRole('button', { name: 'Bayar Sekarang' }));
+    await user.click(screen.getByRole('button', { name: 'QRIS' }));
+    await screen.findByRole('dialog', { name: /QRIS/ });
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: /QRIS/ })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Bayar' })).toBeTruthy();
+  });
+
+  it('Escape does not close Bayar while a save is in flight', async () => {
+    m.buatPesanan.mockImplementation(() => new Promise(() => {}));
+    const user = await isiKeranjang();
+    await bukaBayarTunai(user);
+    await user.click(screen.getByRole('button', { name: 'Simpan Lunas' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Bayar' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tutup' })).toHaveProperty('disabled', true);
+  });
+
   it('QRIS without qrisStatis shows the "belum diatur" message', async () => {
     const user = await isiKeranjang();
     await user.click(screen.getByRole('button', { name: /Lihat pesanan/ }));

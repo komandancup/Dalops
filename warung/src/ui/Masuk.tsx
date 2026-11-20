@@ -6,7 +6,8 @@ import Tombol from './komponen/Tombol';
 
 const GAYA_INPUT = 'min-h-12 rounded-xl border-2 border-stone-300 bg-white px-3 text-lg outline-none focus:border-orange-700';
 
-export default function Masuk() {
+/** `alasan`: why the app just signed this account out (e.g. deactivated), shown until a new error replaces it. */
+export default function Masuk({ alasan = null }: { alasan?: string | null }) {
   const [username, setUsername] = useState('');
   const [sandi, setSandi] = useState('');
   const [galat, setGalat] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export default function Masuk() {
           <input type="password" value={sandi} onChange={(e) => setSandi(e.target.value)} autoComplete="current-password"
             className={GAYA_INPUT} />
         </label>
-        {galat && <p role="alert" className="text-base font-medium text-red-800">{galat}</p>}
+        {(galat ?? alasan) && <p role="alert" className="text-base font-medium text-red-800">{galat ?? alasan}</p>}
         <Tombol type="submit" onClick={kirim} disabled={username.trim() === '' || sandi === ''} className="min-h-14 text-xl">
           Masuk
         </Tombol>

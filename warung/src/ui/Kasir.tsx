@@ -24,6 +24,7 @@ export default function Kasir({ pengguna, sesi }: Props) {
   const [layar, setLayar] = useState<'menu' | 'keranjang' | 'bayar'>('menu');
   const [galat, setGalat] = useState<string | null>(null);
   const [kabar, setKabar] = useState<string | null>(null);
+  const [menyimpan, setMenyimpan] = useState(false);
 
   useEffect(() => {
     setGalatMenu(null);
@@ -51,10 +52,13 @@ export default function Kasir({ pengguna, sesi }: Props) {
 
   async function simpanNanti() {
     setGalat(null);
+    setMenyimpan(true);
     try {
       await simpan(null);
     } catch (e) {
       setGalat(pesanGalat(e));
+    } finally {
+      setMenyimpan(false);
     }
   }
 
@@ -131,7 +135,7 @@ export default function Kasir({ pengguna, sesi }: Props) {
       )}
 
       {layar === 'keranjang' && (
-        <Dialog judul="Pesanan" onTutup={() => setLayar('menu')}>
+        <Dialog judul="Pesanan" onTutup={() => setLayar('menu')} kunci={menyimpan}>
           <ul className="mb-4 divide-y divide-stone-200">
             {k.baris.map((b) => (
               <li key={b.menu.id} className="flex items-center gap-2 py-2">
@@ -169,7 +173,7 @@ export default function Kasir({ pengguna, sesi }: Props) {
           </div>
           {galat && <p role="alert" className="mb-3 text-base font-medium text-red-800">{galat}</p>}
           <div className="flex flex-col gap-3">
-            <Tombol onClick={() => setLayar('bayar')} className="min-h-14 text-xl">Bayar Sekarang</Tombol>
+            <Tombol onClick={() => setLayar('bayar')} disabled={menyimpan} className="min-h-14 text-xl">Bayar Sekarang</Tombol>
             <Tombol onClick={simpanNanti} jenis="kedua">Simpan, Bayar Nanti</Tombol>
           </div>
         </Dialog>

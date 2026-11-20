@@ -4,6 +4,7 @@ const m = vi.hoisted(() => ({
   signIn: vi.fn(),
   signOut: vi.fn(async () => {}),
   authCb: null as null | ((u: unknown) => void),
+  authErr: null as null | ((e: unknown) => void),
   unsubAuth: vi.fn(),
   unsubDoc: vi.fn(),
   snapOk: null as null | ((s: unknown) => void),
@@ -12,8 +13,9 @@ const m = vi.hoisted(() => ({
 vi.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: m.signIn,
   signOut: m.signOut,
-  onAuthStateChanged: (_a: unknown, cb: (u: unknown) => void) => {
+  onAuthStateChanged: (_a: unknown, cb: (u: unknown) => void, err: (e: unknown) => void) => {
     m.authCb = cb;
+    m.authErr = err;
     return m.unsubAuth;
   },
 }));
@@ -26,7 +28,7 @@ vi.mock('firebase/firestore', () => ({
   },
 }));
 
-import { masuk, pantauPengguna } from '../../src/data/auth';
+import { ALASAN_NONAKTIF, ALASAN_TIDAK_TERDAFTAR, masuk, pantauPengguna } from '../../src/data/auth';
 
 const auth = {} as never;
 const db = {} as never;
@@ -34,7 +36,7 @@ const snap = (d: Record<string, unknown> | null) => ({ exists: () => d !== null,
 
 beforeEach(() => {
   vi.clearAllMocks();
-  m.snapOk = m.snapErr = m.authCb = null;
+  m.snapOk = m.snapErr = m.authCb = m.authErr = null;
 });
 
 describe('masuk', () => {
@@ -75,7 +77,7 @@ describe('pantauPengguna', () => {
     m.authCb!({ uid: 'u1' });
     m.snapOk!(snap(null));
     expect(m.signOut).toHaveBeenCalled();
-    expect(cb).toHaveBeenCalledWith(null);
+    expect(cb).toHaveBeenCalledWith(null, { alasan: ALASAN_TIDAK_TERDAFTAR });
   });
   it('signs out when inactive', () => {
     const cb = vi.fn();
@@ -83,7 +85,7 @@ describe('pantauPengguna', () => {
     m.authCb!({ uid: 'u1' });
     m.snapOk!(snap({ ...aktifDoc, aktif: false }));
     expect(m.signOut).toHaveBeenCalled();
-    expect(cb).toHaveBeenCalledWith(null);
+    expect(cb).toHaveBeenCalledWith(null, { alasan: ALASAN_NONAKTIF });
   });
   it('signs out on permission-denied', () => {
     const cb = vi.fn();
@@ -91,7 +93,7 @@ describe('pantauPengguna', () => {
     m.authCb!({ uid: 'u1' });
     m.snapErr!({ code: 'permission-denied' });
     expect(m.signOut).toHaveBeenCalled();
-    expect(cb).toHaveBeenCalledWith(null);
+    expect(cb).toHaveBeenCalledWith(null, { alasan: ALASAN_NONAKTIF });
   });
   it('keeps session on other errors', () => {
     const cb = vi.fn();
@@ -102,6 +104,24 @@ describe('pantauPengguna', () => {
     expect(m.signOut).not.toHaveBeenCalled();
     expect(cb).not.toHaveBeenCalled();
     log.mockRestore();
+  });
+  it('reports other listener errors to onError and keeps the session', () => {
+    const cb = vi.fn();
+    const onError = vi.fn();
+    pantauPengguna(auth, db, cb, onError);
+    m.authCb!({ uid: 'u1' });
+    const e = Object.assign(new Error('offline'), { code: 'unavailable' });
+    m.snapErr!(e);
+    expect(onError).toHaveBeenCalledWith(e);
+    expect(m.signOut).not.toHaveBeenCalled();
+    expect(cb).not.toHaveBeenCalled();
+  });
+  it('reports auth listener errors to onError as Error', () => {
+    const onError = vi.fn();
+    pantauPengguna(auth, db, vi.fn(), onError);
+    m.authErr!({ code: 'auth/internal-error', message: 'boom' });
+    expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(onError.mock.calls[0][0].message).toBe('boom');
   });
   it('unsubscribe tears down both listeners', () => {
     const un = pantauPengguna(auth, db, vi.fn());

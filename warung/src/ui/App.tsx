@@ -17,10 +17,31 @@ const JUDUL: Record<Exclude<Tab, 'kasir'>, string> = {
 
 export default function App() {
   const [pengguna, setPengguna] = useState<Pengguna | null | undefined>(undefined);
-  useEffect(() => pantauPengguna(auth, db, setPengguna), []);
+  const [alasanKeluar, setAlasanKeluar] = useState<string | null>(null);
+  const [galat, setGalat] = useState<string | null>(null);
+  const [muatKe, setMuatKe] = useState(0);
 
+  useEffect(() => {
+    setGalat(null);
+    setPengguna(undefined);
+    return pantauPengguna(
+      auth, db,
+      (p, info) => {
+        setPengguna(p);
+        if (p) setAlasanKeluar(null);
+        else if (info) setAlasanKeluar(info.alasan); // a plain null (the sign-out itself) keeps the reason
+      },
+      (e) => {
+        console.error('pantauPengguna:', e);
+        setGalat(pesanGalat(e));
+      },
+    );
+  }, [muatKe]);
+
+  // While signed in a dead profile listener is only logged: kicking the cashier out mid-order is worse.
+  if (galat && !pengguna) return <LayarGalat pesan={galat} onCobaLagi={() => setMuatKe((n) => n + 1)} />;
   if (pengguna === undefined) return <LayarMemuat />;
-  if (pengguna === null) return <Masuk />;
+  if (pengguna === null) return <Masuk alasan={alasanKeluar} />;
   return <Utama key={pengguna.uid} pengguna={pengguna} />;
 }
 

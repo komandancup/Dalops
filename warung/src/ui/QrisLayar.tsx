@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { qrisDinamis } from '../lib/qris';
 import { formatRupiah } from '../lib/uang';
@@ -8,16 +8,37 @@ import Tombol from './komponen/Tombol';
 interface Props {
   /** The shop's static QRIS; undefined while settings are loading, null when not set up. */
   statis: string | null | undefined;
+  /** Settings could not be loaded; shown with a "Coba lagi" that calls onMuatUlang. */
+  galatMuat: string | null;
+  onMuatUlang(): void;
   total: number;
   onLunas(): Promise<void>;
   onGantiTunai(): void;
+  /** Escape: back to the payment choice. Ignored while `menyimpan`. */
+  onKembali(): void;
+  menyimpan: boolean;
   /** Error from the last save attempt, shown above the buttons. */
   galat: string | null;
 }
 
 /** Full-screen dynamic QRIS for the customer to scan, with the amount in large type. */
-export default function QrisLayar({ statis, total, onLunas, onGantiTunai, galat }: Props) {
+export default function QrisLayar(
+  { statis, galatMuat, onMuatUlang, total, onLunas, onGantiTunai, onKembali, menyimpan, galat }: Props,
+) {
   const [gambar, setGambar] = useState<{ src: string } | { gagal: string } | null>(null);
+  const kembali = useRef(onKembali);
+  kembali.current = menyimpan ? () => {} : onKembali;
+
+  useEffect(() => {
+    // Capture phase on window runs before the Bayar dialog's document listener, which must not see it.
+    const tekan = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      kembali.current();
+    };
+    window.addEventListener('keydown', tekan, true);
+    return () => window.removeEventListener('keydown', tekan, true);
+  }, []);
 
   useEffect(() => {
     if (!statis) return;
@@ -37,7 +58,14 @@ export default function QrisLayar({ statis, total, onLunas, onGantiTunai, galat 
   }, [statis, total]);
 
   let isi;
-  if (statis === undefined) isi = <p className="text-lg text-stone-700">Memuat QRIS…</p>;
+  if (galatMuat) {
+    isi = (
+      <div className="flex flex-col items-center gap-3">
+        <p className="text-xl font-semibold text-red-800">{galatMuat}</p>
+        <Tombol onClick={onMuatUlang} jenis="kedua">Coba lagi</Tombol>
+      </div>
+    );
+  } else if (statis === undefined) isi = <p className="text-lg text-stone-700">Memuat QRIS…</p>;
   else if (statis === null) {
     isi = <p className="text-xl font-semibold text-red-800">QRIS warung belum diatur. Minta pemilik mengisi di Pengaturan.</p>;
   } else if (gambar === null) isi = <p className="text-lg text-stone-700">Membuat kode QR…</p>;

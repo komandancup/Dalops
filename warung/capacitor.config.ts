@@ -6,7 +6,8 @@ const config: CapacitorConfig = {
   appId: 'id.warung.pecellele',
   appName: 'Warung',
   webDir: 'dist',
-  server: { url: process.env.WARUNG_URL, cleartext: false },
+  // Without signal the WebView shows the bundled public/offline.html instead of a browser error page.
+  server: { url: process.env.WARUNG_URL, cleartext: false, errorPath: 'offline.html' },
 };
 
 export default config;

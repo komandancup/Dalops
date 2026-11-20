@@ -123,13 +123,16 @@ describe('alur shift', () => {
   it('nomor increments 1,2,3 within a session', async () => {
     const d = db('budi');
     const sesi = await bukaSesi(d, BUDI, 100000, null);
+    expect(sesi.pesananTerakhir).toBeNull();
     const nomor: number[] = [];
+    let terakhir = '';
     for (let i = 0; i < 3; i++) {
       const p = await buatPesanan(d, BUDI, sesi.id, [{ menu: TEH, jumlah: 1 }], { label: '', catatan: '', bayar: null });
       nomor.push(p.nomor);
+      terakhir = p.id;
     }
     expect(nomor).toEqual([1, 2, 3]);
-    expect((await getDoc(doc(d, 'sesiKas', sesi.id))).data()?.jumlahPesanan).toBe(3);
+    expect((await getDoc(doc(d, 'sesiKas', sesi.id))).data()).toMatchObject({ jumlahPesanan: 3, pesananTerakhir: terakhir });
   });
 
   it('buatPesanan copies nama and harga', async () => {
@@ -147,7 +150,7 @@ describe('alur shift', () => {
 
   it('pesanan uses sesi tanggal, not clock date', async () => {
     await seed('sesiKas/s1', {
-      tanggal: '2026-11-20', status: 'buka', jumlahPesanan: 0,
+      tanggal: '2026-11-20', status: 'buka', jumlahPesanan: 0, pesananTerakhir: null,
       dibukaOleh: BUDI, dibukaPada: 'x', modalAwal: 100000, modalSaran: 100000, alasanUbahModal: null,
       ditutupOleh: null, ditutupPada: null, tunaiSeharusnya: null, tunaiDihitung: null, selisihTunai: null,
       qrisAplikasi: null, qrisMerchant: null, selisihQris: null, disetor: null, ditinggal: null, catatan: null,

@@ -37,7 +37,7 @@ export async function bukaSesi(
 
     const ref = doc(collection(db, 'sesiKas'));
     tx.set(ref, {
-      tanggal: tanggalWIB(new Date()), status: 'buka', jumlahPesanan: 0,
+      tanggal: tanggalWIB(new Date()), status: 'buka', jumlahPesanan: 0, pesananTerakhir: null,
       dibukaOleh: pelaku, dibukaPada: serverTimestamp(), modalAwal, modalSaran, alasanUbahModal: alasan,
       ditutupOleh: null, ditutupPada: null, tunaiSeharusnya: null, tunaiDihitung: null, selisihTunai: null,
       qrisAplikasi: null, qrisMerchant: null, selisihQris: null, disetor: null, ditinggal: null, catatan: null,
@@ -82,21 +82,50 @@ export function pantauSesiAktif(
   };
 }
 
+/** The order list queried before the transaction no longer matches the session counter. */
+class PesananBerubah extends Error {
+  constructor() {
+    super('Ada pesanan baru masuk. Coba tutup kas lagi.');
+  }
+}
+
 /**
  * Closes the session. Per ruling R1 the orders/expenses are queried first (web SDK transactions
  * cannot run queries); the transaction then re-reads sesi + sesiAktif and writes both.
+ * If the queried orders turn out stale, they are queried once more before giving up.
  */
 export async function tutupSesi(
   db: Firestore, pelaku: Pelaku, sesiId: string,
   data: { tunaiDihitung: number; qrisMerchant: number; disetor: number; ditinggal: number; catatan: string },
 ): Promise<void> {
-  const [pesananSnap, pengeluaranSnap] = await Promise.all([
-    getDocs(query(collection(db, 'pesanan'), where('sesiKasId', '==', sesiId))),
-    getDocs(query(collection(db, 'pengeluaran'), where('sesiKasId', '==', sesiId))),
-  ]);
-  const pesanan = pesananSnap.docs.map((d) => dariDoc<Pesanan>(d));
-  const pengeluaran = pengeluaranSnap.docs.map((d) => dariDoc<Pengeluaran>(d));
+  const ambilCatatan = async () => {
+    const [pesananSnap, pengeluaranSnap] = await Promise.all([
+      getDocs(query(collection(db, 'pesanan'), where('sesiKasId', '==', sesiId))),
+      getDocs(query(collection(db, 'pengeluaran'), where('sesiKasId', '==', sesiId))),
+    ]);
+    return {
+      pesanan: pesananSnap.docs.map((d) => dariDoc<Pesanan>(d)),
+      pengeluaran: pengeluaranSnap.docs.map((d) => dariDoc<Pengeluaran>(d)),
+    };
+  };
 
+  let catatanSesi = await ambilCatatan();
+  for (let coba = 0; ; coba++) {
+    try {
+      await tulisTutup(db, pelaku, sesiId, data, catatanSesi.pesanan, catatanSesi.pengeluaran);
+      return;
+    } catch (e) {
+      if (!(e instanceof PesananBerubah) || coba > 0) throw e;
+      catatanSesi = await ambilCatatan();
+    }
+  }
+}
+
+async function tulisTutup(
+  db: Firestore, pelaku: Pelaku, sesiId: string,
+  data: { tunaiDihitung: number; qrisMerchant: number; disetor: number; ditinggal: number; catatan: string },
+  pesanan: Pesanan[], pengeluaran: Pengeluaran[],
+): Promise<void> {
   await runTransaction(db, async (tx) => {
     const sesiSnap = await tx.get(sesiRef(db, sesiId));
     const penanda = (await tx.get(sesiAktifRef(db))).data() as SesiAktif | undefined;
@@ -106,9 +135,10 @@ export async function tutupSesi(
 
     // The order list was queried before the transaction. If another device created an order since,
     // the session counter (re-read here, so a concurrent bump retries this check) no longer matches.
-    // Known R1 gap: a late lunasi/batal or a new pengeluaran does not touch the sesi doc, so it is not
-    // detected here; the rules still recheck the close arithmetic but not the sums themselves.
-    if (pesanan.length !== sesi.jumlahPesanan) throw new Error('Ada pesanan baru masuk. Coba tutup kas lagi.');
+    // The rules tie every counter bump to exactly one new order, so the two can only differ while the
+    // list is stale. Known R1 gap: a late lunasi/batal or a new pengeluaran does not touch the sesi
+    // doc, so it is not detected here; the rules still recheck the close arithmetic but not the sums.
+    if (pesanan.length !== sesi.jumlahPesanan) throw new PesananBerubah();
 
     const ringkasan = ringkasSesi(sesi, pesanan, pengeluaran);
     const kesalahan = validasiTutup({ ringkasan, ...data });

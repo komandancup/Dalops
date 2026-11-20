@@ -20,6 +20,8 @@ export interface Pengeluaran {
 }
 export interface SesiKas {
   id: string; tanggal: string; status: 'buka' | 'tutup'; jumlahPesanan: number;
+  /** Id of the order that took the latest nomor (null until the first order). */
+  pesananTerakhir: string | null;
   dibukaOleh: Pelaku; dibukaPada: Date; modalAwal: number; modalSaran: number; alasanUbahModal: string | null;
   ditutupOleh: Pelaku | null; ditutupPada: Date | null; tunaiSeharusnya: number | null; tunaiDihitung: number | null;
   selisihTunai: number | null; qrisAplikasi: number | null; qrisMerchant: number | null; selisihQris: number | null;

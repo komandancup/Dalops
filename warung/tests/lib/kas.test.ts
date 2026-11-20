@@ -22,7 +22,7 @@ function buatPengeluaran(o: Partial<Pengeluaran>): Pengeluaran {
 }
 function buatSesi(o: Partial<SesiKas>): SesiKas {
   return {
-    id: 's1', tanggal: '2026-11-20', status: 'buka', jumlahPesanan: 0, dibukaOleh: pelaku, dibukaPada: waktu,
+    id: 's1', tanggal: '2026-11-20', status: 'buka', jumlahPesanan: 0, pesananTerakhir: null, dibukaOleh: pelaku, dibukaPada: waktu,
     modalAwal: 0, modalSaran: 0, alasanUbahModal: null, ditutupOleh: null, ditutupPada: null,
     tunaiSeharusnya: null, tunaiDihitung: null, selisihTunai: null, qrisAplikasi: null, qrisMerchant: null,
     selisihQris: null, disetor: null, ditinggal: null, catatan: null, ...o,

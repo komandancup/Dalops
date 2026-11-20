@@ -38,7 +38,7 @@ const item = [{ menuId: 'lele', nama: 'Pecel Lele', harga: 15000, jumlah: 2 }];
 
 function sesiBaru(pelaku = BUDI, extra: Record<string, unknown> = {}) {
   return {
-    tanggal: HARI, status: 'buka', jumlahPesanan: 0,
+    tanggal: HARI, status: 'buka', jumlahPesanan: 0, pesananTerakhir: null,
     dibukaOleh: pelaku, dibukaPada: serverTimestamp(), modalAwal: 50000, modalSaran: 50000, alasanUbahModal: null,
     ditutupOleh: null, ditutupPada: null, tunaiSeharusnya: null, tunaiDihitung: null, selisihTunai: null,
     qrisAplikasi: null, qrisMerchant: null, selisihQris: null, disetor: null, ditinggal: null, catatan: null,
@@ -94,7 +94,7 @@ async function seedSesiTutup() {
 function buatPesananBatch(d: Firestore, id: string, nomor: number, data = pesananBaru(nomor)) {
   const b = writeBatch(d);
   b.set(doc(d, 'pesanan', id), data);
-  b.update(doc(d, 'sesiKas', 's1'), { jumlahPesanan: increment(1) });
+  b.update(doc(d, 'sesiKas', 's1'), { jumlahPesanan: increment(1), pesananTerakhir: id });
   return b.commit();
 }
 
@@ -181,6 +181,14 @@ describe('sesi kas', () => {
     await assertSucceeds(dengan.commit());
   });
 
+  it('a new session must start with pesananTerakhir null', async () => {
+    const d = db('budi');
+    const b = writeBatch(d);
+    b.set(doc(d, 'sesiKas', 's1'), sesiBaru(BUDI, { pesananTerakhir: 'p9' }));
+    b.update(doc(d, 'pengaturan', 'sesiAktif'), { sesiKasId: 's1' });
+    await assertFails(b.commit());
+  });
+
   it('modalSaran must equal sesiAktif.ditinggalTerakhir', async () => {
     const d = db('budi');
     const b = writeBatch(d);
@@ -263,6 +271,38 @@ describe('pesanan', () => {
     await seedSesiBuka(2);
     await assertFails(buatPesananBatch(db('budi'), 'p3', 2));
     await assertFails(setDoc(doc(db('budi'), 'pesanan', 'p3'), pesananBaru(3)));
+  });
+
+  it('a bare counter bump (no new order) is denied, even pointing at an existing order', async () => {
+    await seedSesiBuka(1);
+    await seed('pesanan/p1', pesananBaru(1));
+    const d = db('budi');
+    await assertFails(updateDoc(doc(d, 'sesiKas', 's1'), { jumlahPesanan: increment(1) }));
+    await assertFails(updateDoc(doc(d, 'sesiKas', 's1'), { jumlahPesanan: increment(1), pesananTerakhir: 'p2' }));
+    await assertFails(updateDoc(doc(d, 'sesiKas', 's1'), { jumlahPesanan: increment(1), pesananTerakhir: 'p1' }));
+  });
+
+  it('two orders in one batch with a single bump are denied', async () => {
+    await seedSesiBuka();
+    const d = db('budi');
+    const b = writeBatch(d);
+    b.set(doc(d, 'pesanan', 'p1'), pesananBaru(1));
+    b.set(doc(d, 'pesanan', 'p2'), pesananBaru(1));
+    b.update(doc(d, 'sesiKas', 's1'), { jumlahPesanan: increment(1), pesananTerakhir: 'p2' });
+    await assertFails(b.commit());
+  });
+
+  it('the order must be the one named by pesananTerakhir, in this session', async () => {
+    await seedSesiBuka();
+    const d = db('budi');
+    const lain = writeBatch(d);
+    lain.set(doc(d, 'pesanan', 'p1'), pesananBaru(1));
+    lain.update(doc(d, 'sesiKas', 's1'), { jumlahPesanan: increment(1), pesananTerakhir: 'pX' });
+    await assertFails(lain.commit());
+    const tanpa = writeBatch(d);
+    tanpa.set(doc(d, 'pesanan', 'p1'), pesananBaru(1));
+    tanpa.update(doc(d, 'sesiKas', 's1'), { jumlahPesanan: increment(1) });
+    await assertFails(tanpa.commit());
   });
 
   it('pesanan in closed session is denied', async () => {

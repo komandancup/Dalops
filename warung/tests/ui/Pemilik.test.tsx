@@ -46,7 +46,7 @@ function pengeluaran(o: Partial<Pengeluaran>): Pengeluaran {
 }
 // The phone stored seharusnya 100.000 and selisih 0; the records say 100.000 + 30.000 tunai = 130.000.
 const sesiTutup: SesiKas = {
-  id: 's1', tanggal: '2026-11-19', status: 'tutup', jumlahPesanan: 1, dibukaOleh: budi, dibukaPada: waktu,
+  id: 's1', tanggal: '2026-11-19', status: 'tutup', jumlahPesanan: 1, pesananTerakhir: 'a', dibukaOleh: budi, dibukaPada: waktu,
   modalAwal: 100000, modalSaran: 100000, alasanUbahModal: null, ditutupOleh: budi,
   ditutupPada: new Date('2026-11-19T15:00:00Z'), tunaiSeharusnya: 100000, tunaiDihitung: 100000, selisihTunai: 0,
   qrisAplikasi: 0, qrisMerchant: 0, selisihQris: 0, disetor: 50000, ditinggal: 50000, catatan: null,

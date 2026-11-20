@@ -48,7 +48,7 @@ export async function buatPesanan(
       dilunasiOleh: bayar ? pelaku : null, dilunasiPada: bayar ? serverTimestamp() : null,
       dibatalkanOleh: null, dibatalkanPada: null, alasanBatal: null,
     });
-    tx.update(sesiRef, { jumlahPesanan: nomor });
+    tx.update(sesiRef, { jumlahPesanan: nomor, pesananTerakhir: ref.id });
   });
   return dariDoc<Pesanan>(await getDoc(ref));
 }

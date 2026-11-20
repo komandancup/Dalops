@@ -9,8 +9,10 @@ rules_version = '2';
 // - Akun aktif = false tidak bisa membaca/menulis apa pun.
 //
 // Kontrak batch (lihat juga src/data/*):
-// - Buka kas: create sesiKas/{id} (status buka, jumlahPesanan 0) + update sesiAktif.sesiKasId null -> {id}.
-// - Pesanan baru: create pesanan/{id} (nomor = jumlahPesanan + 1) + update sesiKas jumlahPesanan +1.
+// - Buka kas: create sesiKas/{id} (status buka, jumlahPesanan 0, pesananTerakhir null)
+//   + update sesiAktif.sesiKasId null -> {id}.
+// - Pesanan baru: create pesanan/{p} (nomor = jumlahPesanan + 1) + update sesiKas jumlahPesanan +1 dan
+//   pesananTerakhir = {p}. Satu kenaikan = tepat satu pesanan baru, jadi jumlah pesanan selalu = jumlahPesanan.
 // - Tutup kas: sesiKas buka -> tutup + sesiAktif = { sesiKasId: null, ditinggalTerakhir: ditinggal }.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -167,13 +169,14 @@ service cloud.firestore {
       function sesiBaruValid() {
         let d = request.resource.data;
         let penanda = get(sesiAktifPath()).data;
-        return kunciPersis(d, ['tanggal', 'status', 'jumlahPesanan', 'dibukaOleh', 'dibukaPada',
+        return kunciPersis(d, ['tanggal', 'status', 'jumlahPesanan', 'pesananTerakhir', 'dibukaOleh', 'dibukaPada',
             'modalAwal', 'modalSaran', 'alasanUbahModal', 'ditutupOleh', 'ditutupPada',
             'tunaiSeharusnya', 'tunaiDihitung', 'selisihTunai', 'qrisAplikasi', 'qrisMerchant',
             'selisihQris', 'disetor', 'ditinggal', 'catatan'])
           && tanggalHariIni(d.tanggal)
           && d.status == 'buka'
           && d.jumlahPesanan == 0
+          && d.pesananTerakhir == null
           && pelakuSaya(d.dibukaOleh)
           && d.dibukaPada == request.time
           && rupiah(d.modalAwal) && d.modalAwal >= 0
@@ -188,10 +191,17 @@ service cloud.firestore {
           && getAfter(sesiAktifPath()).data.sesiKasId == id;
       }
 
-      // Bagian dari batch pesanan baru.
+      // Bagian dari batch pesanan baru: pesananTerakhir menunjuk pesanan yang baru dibuat di batch
+      // yang sama (belum ada sebelumnya), bernomor jumlahPesanan yang baru, di sesi ini.
       function tambahNomor() {
-        return hanyaUbah(['jumlahPesanan'])
-          && request.resource.data.jumlahPesanan == resource.data.jumlahPesanan + 1;
+        let d = request.resource.data;
+        let baru = getAfter(docPath('pesanan', d.pesananTerakhir)).data;
+        return hanyaUbah(['jumlahPesanan', 'pesananTerakhir'])
+          && d.jumlahPesanan == resource.data.jumlahPesanan + 1
+          && d.pesananTerakhir is string
+          && !exists(docPath('pesanan', d.pesananTerakhir))
+          && baru.nomor == d.jumlahPesanan
+          && baru.sesiKasId == id;
       }
 
       function tutupSesi() {
@@ -253,6 +263,7 @@ service cloud.firestore {
           // Nomor urut: penghitung sesi naik 1 di batch yang sama.
           && sesudah.jumlahPesanan == sebelum.jumlahPesanan + 1
           && d.nomor == sesudah.jumlahPesanan
+          && sesudah.pesananTerakhir == id
           && d.tanggal == sebelum.tanggal
           && d.label is string
           && d.catatan is string

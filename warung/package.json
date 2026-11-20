@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test": "vitest run tests/lib tests/api",
-    "test:emu": "firebase emulators:exec --only auth,firestore \"vitest run tests/rules tests/data\""
+    "test:emu": "firebase emulators:exec --only auth,firestore \"vitest run --no-file-parallelism tests/rules tests/data\""
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",

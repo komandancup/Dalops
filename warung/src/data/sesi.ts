@@ -1,0 +1,125 @@
+import {
+  collection, doc, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, where,
+  type Firestore, type Unsubscribe,
+} from 'firebase/firestore';
+import { ringkasSesi, validasiTutup } from '../lib/kas';
+import { tanggalWIB } from '../lib/tanggal';
+import type { Koreksi, Pelaku, Pengeluaran, Pesanan, SesiAktif, SesiKas } from '../types';
+import { dariDoc } from './konversi';
+
+const sesiAktifRef = (db: Firestore) => doc(db, 'pengaturan', 'sesiAktif');
+const sesiRef = (db: Firestore, id: string) => doc(db, 'sesiKas', id);
+
+async function ambilSesi(db: Firestore, id: string): Promise<SesiKas> {
+  const snap = await getDoc(sesiRef(db, id));
+  if (!snap.exists()) throw new Error('Sesi kas tidak ditemukan.');
+  return dariDoc<SesiKas>(snap);
+}
+
+/** Opens a cash session. If one is already open, returns it instead of opening another. */
+export async function bukaSesi(
+  db: Firestore, pelaku: Pelaku, modalAwal: number, alasanUbahModal: string | null,
+): Promise<SesiKas> {
+  const id = await runTransaction(db, async (tx) => {
+    const penanda = (await tx.get(sesiAktifRef(db))).data() as SesiAktif | undefined;
+    if (!penanda) throw new Error('Pengaturan kas belum disiapkan pemilik.');
+    if (penanda.sesiKasId) return penanda.sesiKasId;
+
+    const modalSaran = penanda.ditinggalTerakhir;
+    const alasan = modalAwal === modalSaran ? null : (alasanUbahModal ?? '').trim();
+    if (alasan === '') throw new Error('Modal awal berbeda dari saran. Tulis alasannya.');
+
+    const ref = doc(collection(db, 'sesiKas'));
+    tx.set(ref, {
+      tanggal: tanggalWIB(new Date()), status: 'buka', jumlahPesanan: 0,
+      dibukaOleh: pelaku, dibukaPada: serverTimestamp(), modalAwal, modalSaran, alasanUbahModal: alasan,
+      ditutupOleh: null, ditutupPada: null, tunaiSeharusnya: null, tunaiDihitung: null, selisihTunai: null,
+      qrisAplikasi: null, qrisMerchant: null, selisihQris: null, disetor: null, ditinggal: null, catatan: null,
+    });
+    tx.update(sesiAktifRef(db), { sesiKasId: ref.id });
+    return ref.id;
+  });
+  return ambilSesi(db, id);
+}
+
+export async function ambilSesiAktif(db: Firestore): Promise<{ aktif: SesiKas | null; modalSaran: number }> {
+  const penanda = (await getDoc(sesiAktifRef(db))).data() as SesiAktif | undefined;
+  const modalSaran = penanda?.ditinggalTerakhir ?? 0;
+  if (!penanda?.sesiKasId) return { aktif: null, modalSaran };
+  return { aktif: await ambilSesi(db, penanda.sesiKasId), modalSaran };
+}
+
+/** Follows the open session (null when none). Re-subscribes when the marker moves. */
+export function pantauSesiAktif(db: Firestore, cb: (s: SesiKas | null) => void): Unsubscribe {
+  let lepasSesi: Unsubscribe | null = null;
+  let idSekarang: string | null | undefined; // undefined = no marker snapshot yet
+  const lepasPenanda = onSnapshot(sesiAktifRef(db), (snap) => {
+    const id = (snap.data() as SesiAktif | undefined)?.sesiKasId ?? null;
+    if (id === idSekarang) return;
+    lepasSesi?.();
+    lepasSesi = null;
+    idSekarang = id;
+    if (!id) {
+      cb(null);
+      return;
+    }
+    lepasSesi = onSnapshot(sesiRef(db, id), (s) => cb(s.exists() ? dariDoc<SesiKas>(s) : null));
+  });
+  return () => {
+    lepasPenanda();
+    lepasSesi?.();
+  };
+}
+
+/**
+ * Closes the session. Per ruling R1 the orders/expenses are queried first (web SDK transactions
+ * cannot run queries); the transaction then re-reads sesi + sesiAktif and writes both.
+ */
+export async function tutupSesi(
+  db: Firestore, pelaku: Pelaku, sesiId: string,
+  data: { tunaiDihitung: number; qrisMerchant: number; disetor: number; ditinggal: number; catatan: string },
+): Promise<void> {
+  const [pesananSnap, pengeluaranSnap] = await Promise.all([
+    getDocs(query(collection(db, 'pesanan'), where('sesiKasId', '==', sesiId))),
+    getDocs(query(collection(db, 'pengeluaran'), where('sesiKasId', '==', sesiId))),
+  ]);
+  const pesanan = pesananSnap.docs.map((d) => dariDoc<Pesanan>(d));
+  const pengeluaran = pengeluaranSnap.docs.map((d) => dariDoc<Pengeluaran>(d));
+
+  await runTransaction(db, async (tx) => {
+    const sesiSnap = await tx.get(sesiRef(db, sesiId));
+    const penanda = (await tx.get(sesiAktifRef(db))).data() as SesiAktif | undefined;
+    if (!sesiSnap.exists()) throw new Error('Sesi kas tidak ditemukan.');
+    const sesi = dariDoc<SesiKas>(sesiSnap);
+    if (sesi.status !== 'buka' || penanda?.sesiKasId !== sesiId) throw new Error('Sesi kas ini sudah ditutup.');
+
+    const ringkasan = ringkasSesi(sesi, pesanan, pengeluaran);
+    const kesalahan = validasiTutup({ ringkasan, ...data });
+    if (kesalahan.length > 0) throw new Error(kesalahan.join('\n'));
+
+    const catatan = data.catatan.trim();
+    tx.update(sesiRef(db, sesiId), {
+      status: 'tutup', ditutupOleh: pelaku, ditutupPada: serverTimestamp(),
+      tunaiSeharusnya: ringkasan.tunaiSeharusnya, tunaiDihitung: data.tunaiDihitung,
+      selisihTunai: data.tunaiDihitung - ringkasan.tunaiSeharusnya,
+      qrisAplikasi: ringkasan.penjualanQris, qrisMerchant: data.qrisMerchant,
+      selisihQris: data.qrisMerchant - ringkasan.penjualanQris,
+      disetor: data.disetor, ditinggal: data.ditinggal, catatan: catatan === '' ? null : catatan,
+    });
+    tx.set(sesiAktifRef(db), { sesiKasId: null, ditinggalTerakhir: data.ditinggal });
+  });
+}
+
+/** Everything recorded with a WIB `tanggal` in [dari, sampai] (inclusive, YYYY-MM-DD). */
+export async function ambilPeriode(db: Firestore, dari: string, sampai: string): Promise<{
+  sesi: SesiKas[]; pesanan: Pesanan[]; pengeluaran: Pengeluaran[]; koreksi: Koreksi[];
+}> {
+  const ambil = async <T>(koleksi: string) => {
+    const snap = await getDocs(query(collection(db, koleksi), where('tanggal', '>=', dari), where('tanggal', '<=', sampai)));
+    return snap.docs.map((d) => dariDoc<T>(d));
+  };
+  const [sesi, pesanan, pengeluaran, koreksi] = await Promise.all([
+    ambil<SesiKas>('sesiKas'), ambil<Pesanan>('pesanan'), ambil<Pengeluaran>('pengeluaran'), ambil<Koreksi>('koreksi'),
+  ]);
+  return { sesi, pesanan, pengeluaran, koreksi };
+}

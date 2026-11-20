@@ -1,4 +1,5 @@
 import { hitungTotal, ringkasSesi } from './kas';
+import { jamWIB, tambahHari, tanggalWIB } from './tanggal';
 import { formatRupiah } from './uang';
 import type { KategoriPengeluaran, Koreksi, Pengeluaran, Pesanan, SesiKas } from '../types';
 
@@ -17,7 +18,7 @@ export interface Rekap {
 
 export interface Peringatan {
   jenis: 'batal_pesanan' | 'batal_pengeluaran' | 'selisih_tunai' | 'selisih_qris' | 'modal_diubah' | 'tutup_tidak_cocok'
-    | 'pesanan_tidak_wajar';
+    | 'pesanan_tidak_wajar' | 'kas_terlalu_lama';
   waktu: Date;
   pesan: string;
   refId: string;
@@ -160,12 +161,29 @@ function cekPesanan(p: Pesanan): string | null {
   return null;
 }
 
+/** An open drawer older than this, or dated before yesterday (WIB), was probably never closed. */
+const BATAS_JAM_BUKA = 20;
+
 export function daftarPeringatan(d: {
   sesi: SesiKas[];
   pesanan: Pesanan[];
   pengeluaran: Pengeluaran[];
-}): Peringatan[] {
+}, sekarang: Date = new Date()): Peringatan[] {
   const out: Peringatan[] = [];
+  const kemarin = tambahHari(tanggalWIB(sekarang), -1);
+
+  for (const s of d.sesi) {
+    if (s.status !== 'buka') continue;
+    const lama = sekarang.getTime() - s.dibukaPada.getTime() > BATAS_JAM_BUKA * 3600_000;
+    if (s.tanggal < kemarin || lama) {
+      out.push({
+        jenis: 'kas_terlalu_lama',
+        waktu: s.dibukaPada,
+        refId: s.id,
+        pesan: `Kas dibuka sejak ${s.tanggal} ${jamWIB(s.dibukaPada)} oleh ${s.dibukaOleh.nama} dan belum ditutup.`,
+      });
+    }
+  }
 
   for (const p of d.pesanan) {
     const salah = p.status === 'batal' ? null : cekPesanan(p);

@@ -149,7 +149,7 @@ describe('daftarPeringatan', () => {
       qrisAplikasi: 0, qrisMerchant: 0, selisihQris: 0, ditutupOleh: pelaku, ditutupPada: waktu,
     });
     const s2 = buatSesi({ id: 'b' });
-    expect(daftarPeringatan({ sesi: [s1, s2], pesanan: [], pengeluaran: [] })).toEqual([]);
+    expect(daftarPeringatan({ sesi: [s1, s2], pesanan: [], pengeluaran: [] }, waktu)).toEqual([]);
   });
 
   it('terbaru dulu', () => {
@@ -198,6 +198,35 @@ describe('pesanan tidak wajar', () => {
   it('pesanan belum bayar yang tidak wajar juga diperingatkan', () => {
     const p = buatPesanan({ id: 'u', nomor: 2, total: 5000, status: 'belum_bayar', caraBayar: null, item: [item('Pecel Lele', 15000, 1)] });
     expect(daftarPeringatan({ sesi: [], pesanan: [p], pengeluaran: [] }).map((o) => o.jenis)).toEqual(['pesanan_tidak_wajar']);
+  });
+});
+
+describe('kas terlalu lama dibuka', () => {
+  const sekarang = new Date('2026-11-20T03:00:00Z'); // 20/11 10:00 WIB
+
+  it('sesi buka dari sebelum kemarin memicu peringatan merah', () => {
+    const dibuka = new Date('2026-11-18T10:02:00Z'); // 18/11 17:02 WIB
+    const s = buatSesi({ id: 'lama', tanggal: '2026-11-18', dibukaPada: dibuka });
+    expect(daftarPeringatan({ sesi: [s], pesanan: [], pengeluaran: [] }, sekarang)).toEqual([{
+      jenis: 'kas_terlalu_lama', waktu: dibuka, refId: 'lama',
+      pesan: 'Kas dibuka sejak 2026-11-18 17:02 oleh Budi dan belum ditutup.',
+    }]);
+  });
+
+  it('lebih dari 20 jam terbuka juga memicu peringatan walau tanggalnya kemarin', () => {
+    const dibuka = new Date('2026-11-19T06:00:00Z'); // 19/11 13:00 WIB, 21 jam lalu
+    const s = buatSesi({ id: 'k', tanggal: '2026-11-19', dibukaPada: dibuka });
+    expect(daftarPeringatan({ sesi: [s], pesanan: [], pengeluaran: [] }, sekarang).map((o) => o.jenis)).toEqual(['kas_terlalu_lama']);
+  });
+
+  it('kas yang dibuka kemarin sore (kurang dari 20 jam) atau sudah ditutup tidak diperingatkan', () => {
+    const kemarinSore = buatSesi({ id: 'a', tanggal: '2026-11-19', dibukaPada: new Date('2026-11-19T10:00:00Z') });
+    const tutupLama = buatSesi({
+      id: 'b', tanggal: '2026-11-10', dibukaPada: new Date('2026-11-10T10:00:00Z'), status: 'tutup',
+      ditutupOleh: pelaku, ditutupPada: new Date('2026-11-10T15:00:00Z'), tunaiSeharusnya: 0, tunaiDihitung: 0,
+      selisihTunai: 0, qrisAplikasi: 0, qrisMerchant: 0, selisihQris: 0,
+    });
+    expect(daftarPeringatan({ sesi: [kemarinSore, tutupLama], pesanan: [], pengeluaran: [] }, sekarang)).toEqual([]);
   });
 });
 
@@ -285,7 +314,7 @@ describe('tutup kas dicek ulang dari catatan (R5)', () => {
 
   it('sesi yang masih buka tidak dicek', () => {
     const buka = buatSesi({ id: 's5', modalAwal: 100000 });
-    expect(daftarPeringatan({ sesi: [buka], pesanan: pesananS, pengeluaran: pengeluaranS })).toEqual([]);
+    expect(daftarPeringatan({ sesi: [buka], pesanan: pesananS, pengeluaran: pengeluaranS }, waktu)).toEqual([]);
   });
 
   it('cekSesi memberi angka hitung ulang di samping angka tersimpan', () => {

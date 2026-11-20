@@ -62,8 +62,14 @@ beforeEach(() => {
     koreksi: [],
   };
   m.ambilPeriode.mockReset().mockImplementation(async () => data);
+  // 20/11 19:00 WIB: the open session (17:02) is two hours old.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-20T12:00:00Z'));
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe('Beranda', () => {
   it("shows today's numbers from rekapPeriode and the cancelled order under Peringatan", async () => {
@@ -81,7 +87,7 @@ describe('Beranda', () => {
     expect(nilai('Pengeluaran')).toContain(formatRupiah(r.pengeluaranTotal));
     expect(nilai('Perkiraan laba')).toContain(formatRupiah(r.perkiraanLaba));
 
-    expect(screen.getByText('Buka sejak 17:02 oleh Budi')).toBeTruthy();
+    expect(screen.getByText('Buka sejak 20/11 17:02 oleh Budi')).toBeTruthy();
     expect(screen.getByText('1 pesanan belum bayar')).toBeTruthy();
 
     const peringatan = screen.getByRole('region', { name: 'Peringatan' });
@@ -94,6 +100,21 @@ describe('Beranda', () => {
     const hari = tanggalWIB(new Date());
     expect(m.ambilPeriode).toHaveBeenCalledWith({}, tambahHari(hari, -6), hari);
     expect(await screen.findByText('Tutup')).toBeTruthy();
+  });
+
+  it("bases Hari ini on today's WIB date and flags a drawer left open for days", async () => {
+    const user = userEvent.setup();
+    const onBuka = vi.fn();
+    // Opened ten days ago and never closed: outside the 7-day fetch window.
+    const lama = sesi({ tanggal: '2026-11-10', dibukaPada: new Date('2026-11-10T10:02:00Z') });
+    data.sesi = [];
+    render(<Beranda sesi={lama} onBuka={onBuka} />);
+    expect(m.ambilPeriode).toHaveBeenCalledWith({}, '2026-11-14', '2026-11-20');
+    expect(await screen.findByText('Buka sejak 10/11 17:02 oleh Budi')).toBeTruthy();
+    const tombol = screen.getByText('Kas dibuka sejak 2026-11-10 17:02 oleh Budi dan belum ditutup.').closest('button')!;
+    expect(tombol.className).toContain('border-red-300');
+    await user.click(tombol);
+    expect(onBuka).toHaveBeenCalledWith({ halaman: 'riwayat', fokus: { id: 's1', tanggal: '2026-11-10' } });
   });
 
   it('opens the detail of a tapped alert', async () => {

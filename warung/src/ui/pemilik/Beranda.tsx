@@ -16,7 +16,8 @@ interface Props {
 
 /** Owner's first screen: today's numbers, cash drawer status and the last 7 days of alerts. */
 export default function Beranda({ sesi, onBuka }: Props) {
-  const hari = sesi?.tanggal ?? tanggalWIB(new Date());
+  // Today by the clock, not the open session's date: a drawer left open for days must not hide today.
+  const hari = tanggalWIB(new Date());
   const periode = usePeriode(tambahHari(hari, -6), hari);
 
   return (
@@ -41,7 +42,9 @@ export default function Beranda({ sesi, onBuka }: Props) {
 
 function Isi({ data, hari, sesi, onBuka }: { data: Periode; hari: string } & Props) {
   const r = rekapPeriode(data, hari, hari);
-  const peringatan = daftarPeringatan(data);
+  // The open session may predate the 7-day window; it still has to be checked for being left open.
+  const semuaSesi = sesi && !data.sesi.some((x) => x.id === sesi.id) ? [...data.sesi, sesi] : data.sesi;
+  const peringatan = daftarPeringatan({ ...data, sesi: semuaSesi });
   const belumBayar = sesi ? data.pesanan.filter((p) => p.sesiKasId === sesi.id && p.status === 'belum_bayar').length : 0;
 
   function tujuan(p: Peringatan): Tujuan {
@@ -56,7 +59,7 @@ function Isi({ data, hari, sesi, onBuka }: { data: Periode; hari: string } & Pro
       const x = data.pesanan.find((o) => o.id === p.refId);
       return { halaman: 'riwayat', fokus: { id: x?.sesiKasId ?? p.refId, tanggal: x?.tanggal ?? hari } };
     }
-    return { halaman: 'riwayat', fokus: { id: p.refId, tanggal: data.sesi.find((x) => x.id === p.refId)?.tanggal ?? hari } };
+    return { halaman: 'riwayat', fokus: { id: p.refId, tanggal: semuaSesi.find((x) => x.id === p.refId)?.tanggal ?? hari } };
   }
 
   return (
@@ -85,7 +88,7 @@ function Isi({ data, hari, sesi, onBuka }: { data: Periode; hari: string } & Pro
       <section aria-label="Kas" className="flex flex-col gap-1 rounded-2xl border border-stone-200 bg-white p-4">
         <h3 className="text-base text-stone-700">Kas</h3>
         <p className="text-xl font-bold text-stone-900">
-          {sesi ? `Buka sejak ${jamWIB(sesi.dibukaPada)} oleh ${sesi.dibukaOleh.nama}` : 'Tutup'}
+          {sesi ? `Buka sejak ${tanggalPendek(sesi.dibukaPada)} ${jamWIB(sesi.dibukaPada)} oleh ${sesi.dibukaOleh.nama}` : 'Tutup'}
         </p>
         {sesi && (
           <p className={`text-base font-medium ${belumBayar > 0 ? 'text-amber-800' : 'text-stone-700'}`}>
@@ -124,8 +127,14 @@ function Isi({ data, hari, sesi, onBuka }: { data: Periode; hari: string } & Pro
 
 /** Alerts about money that may be missing, drawn in red. */
 const PENTING = new Set<Peringatan['jenis']>([
-  'tutup_tidak_cocok', 'selisih_tunai', 'selisih_qris', 'pesanan_tidak_wajar',
+  'tutup_tidak_cocok', 'selisih_tunai', 'selisih_qris', 'pesanan_tidak_wajar', 'kas_terlalu_lama',
 ]);
+
+/** DD/MM of a moment in WIB, e.g. 20/11. */
+function tanggalPendek(d: Date): string {
+  const [, bulan, hari] = tanggalWIB(d).split('-');
+  return `${hari}/${bulan}`;
+}
 
 function Angka({ label, nilai }: { label: string; nilai: string }) {
   return (

@@ -10,6 +10,7 @@ import { batalkanPengeluaran, catatPengeluaran, pantauPengeluaranSesi } from '..
 import { tambahKoreksi } from '../../src/data/koreksi';
 import { ambilPengaturan, simpanPengaturan } from '../../src/data/pengaturan';
 import { pantauMenu } from '../../src/data/menu';
+import { pantauSemuaPengguna } from '../../src/data/pengguna';
 import { simpanMenu } from '../../src/data/menu';
 import { tanggalWIB } from '../../src/lib/tanggal';
 
@@ -272,5 +273,21 @@ describe('alur shift', () => {
       await expect(buatPesanan(d, BUDI, sesi.id, [{ menu: LELE, jumlah }], { label: '', catatan: '', bayar: null }))
         .rejects.toThrow('Jumlah porsi harus angka bulat lebih dari 0.');
     }
+  });
+
+  it('pantauSemuaPengguna: owner sees every account with uid; a karyawan is denied', async () => {
+    const cb = vi.fn();
+    const lepas = pantauSemuaPengguna(db('owner'), cb);
+    await vi.waitFor(() => expect(cb).toHaveBeenCalled());
+    const daftar = cb.mock.calls.at(-1)![0] as { uid: string; peran: string; aktif: boolean }[];
+    expect(daftar.map((p) => p.uid).sort()).toEqual(['budi', 'eks', 'owner']);
+    expect(daftar.find((p) => p.uid === 'eks')?.aktif).toBe(false);
+    expect(daftar.find((p) => p.uid === 'owner')?.peran).toBe('pemilik');
+    lepas();
+
+    const onError = vi.fn();
+    const lepas2 = pantauSemuaPengguna(db('budi'), vi.fn(), onError);
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    lepas2();
   });
 });

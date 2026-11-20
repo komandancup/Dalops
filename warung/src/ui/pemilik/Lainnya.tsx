@@ -3,8 +3,10 @@ import {
   Ban, BarChart3, ChevronLeft, ChevronRight, History, Receipt, Settings, UtensilsCrossed, Users, Wallet, type LucideIcon,
 } from 'lucide-react';
 import type { Pengguna } from '../../types';
-import { SegeraHadir } from '../Status';
+import Karyawan from './Karyawan';
+import KelolaMenu from './KelolaMenu';
 import Pembatalan from './Pembatalan';
+import PengaturanWarung from './PengaturanWarung';
 import PengeluaranPemilik from './PengeluaranPemilik';
 import Rekap from './Rekap';
 import RiwayatKas from './RiwayatKas';
@@ -62,7 +64,6 @@ export default function Lainnya({ pengguna, tujuan, onTujuan, pengeluaranKas }: 
     );
   }
 
-  const judul = MENU.find((m) => m.halaman === tujuan.halaman)!.judul;
   let isi: ReactNode;
   // Keyed by the focus so a second alert tap re-applies its range and highlight.
   const kunci = tujuan.fokus?.id ?? '';
@@ -71,7 +72,9 @@ export default function Lainnya({ pengguna, tujuan, onTujuan, pengeluaranKas }: 
   else if (tujuan.halaman === 'pembatalan') isi = <Pembatalan key={kunci} fokus={tujuan.fokus} />;
   else if (tujuan.halaman === 'pengeluaranKas') isi = pengeluaranKas();
   else if (tujuan.halaman === 'pengeluaranPemilik') isi = <PengeluaranPemilik pengguna={pengguna} />;
-  else isi = <SegeraHadir judul={judul} />;
+  else if (tujuan.halaman === 'kelolaMenu') isi = <KelolaMenu />;
+  else if (tujuan.halaman === 'karyawan') isi = <Karyawan />;
+  else isi = <PengaturanWarung />;
 
   return (
     <div>

@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Pengguna, Pesanan, SesiKas } from '../../src/types';
 
 const m = vi.hoisted(() => ({
   lunasiPesanan: vi.fn(), batalkanPesanan: vi.fn(), cetakPesanan: vi.fn(), otomatis: false, pesanan: [] as unknown[],
+  cb: null as null | ((p: unknown[]) => void),
 }));
 vi.mock('../../src/firebase', () => ({ db: {}, auth: {} }));
 vi.mock('../../src/data/pesanan', () => ({
   lunasiPesanan: m.lunasiPesanan,
   batalkanPesanan: m.batalkanPesanan,
   pantauPesananSesi: (_db: unknown, _id: string, cb: (p: unknown[]) => void) => {
+    m.cb = cb;
     cb(m.pesanan);
     return () => {};
   },
@@ -67,6 +69,39 @@ describe('DaftarPesanan', () => {
     expect(await screen.findByText('Pesanan #2 lunas.')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(m.cetakPesanan).not.toHaveBeenCalled();
+  });
+
+  it('closes Bayar when another phone pays or cancels the order meanwhile', async () => {
+    const user = userEvent.setup();
+    render_();
+    await user.click(within(screen.getByText('#2').closest('li')!).getByRole('button', { name: 'Bayar' }));
+    expect(screen.getByRole('dialog', { name: 'Bayar Pesanan #2' })).toBeTruthy();
+    // Another phone settles #2: the live list now shows it lunas.
+    act(() => m.cb!((m.pesanan as Pesanan[]).map((p) => (p.id === 'p2' ? { ...p, status: 'lunas', caraBayar: 'qris' } : p))));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe('Pesanan ini sudah dibayar atau dibatalkan di HP lain.');
+    expect(m.lunasiPesanan).not.toHaveBeenCalled();
+  });
+
+  it("this phone's own payment does not trigger the other-phone message", async () => {
+    const user = userEvent.setup();
+    // The local write shows up in the live list before lunasiPesanan resolves (latency compensation).
+    let selesai = () => {};
+    m.lunasiPesanan.mockImplementation(() => {
+      m.cb!((m.pesanan as Pesanan[]).map((p) => (p.id === 'p2' ? { ...p, status: 'lunas', caraBayar: 'tunai' } : p)));
+      return new Promise<void>((r) => { selesai = r; });
+    });
+    render_();
+    await user.click(within(screen.getByText('#2').closest('li')!).getByRole('button', { name: 'Bayar' }));
+    const dialog = screen.getByRole('dialog', { name: 'Bayar Pesanan #2' });
+    await user.click(within(dialog).getByRole('button', { name: 'Tunai' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Simpan Lunas' }));
+    // Still saving: the dialog stays and no other-phone message appears.
+    expect(screen.getByRole('dialog', { name: 'Bayar Pesanan #2' })).toBeTruthy();
+    expect(screen.queryByText('Pesanan ini sudah dibayar atau dibatalkan di HP lain.')).toBeNull();
+    await act(async () => selesai());
+    expect(await screen.findByText('Pesanan #2 lunas.')).toBeTruthy();
+    expect(screen.queryByText('Pesanan ini sudah dibayar atau dibatalkan di HP lain.')).toBeNull();
   });
 
   it('prints automatically after paying when the setting is on; a printer failure only shows its error', async () => {

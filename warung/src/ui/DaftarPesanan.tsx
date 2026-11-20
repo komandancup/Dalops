@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { db } from '../firebase';
 import { batalkanPesanan, lunasiPesanan, pantauPesananSesi } from '../data/pesanan';
 import { formatRupiah } from '../lib/uang';
@@ -34,6 +34,17 @@ function Daftar({ pengguna, sesi, namaWarung }: Props & { sesi: SesiKas }) {
   const [batal, setBatal] = useState<Pesanan | null>(null);
   const [kabar, setKabar] = useState<string | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
+  /** True while this phone is saving the payment: its own write then shows up in the live list. */
+  const sedangBayar = useRef(false);
+
+  // Another phone paid or cancelled the order while Bayar was open here: close it instead of paying twice.
+  const statusBayar = bayar ? data?.find((p) => p.id === bayar.id)?.status : undefined;
+  useEffect(() => {
+    if (!statusBayar || statusBayar === 'belum_bayar' || sedangBayar.current) return;
+    setBayar(null);
+    setKabar(null);
+    setGalat('Pesanan ini sudah dibayar atau dibatalkan di HP lain.');
+  }, [statusBayar]);
 
   if (galatMuat) return <LayarGalat pesan={galatMuat} onCobaLagi={cobaLagi} />;
   if (!data) return <LayarMemuat />;
@@ -116,7 +127,12 @@ function Daftar({ pengguna, sesi, namaWarung }: Props & { sesi: SesiKas }) {
           total={bayar.total}
           judul={`Bayar Pesanan #${bayar.nomor}`}
           onBayar={async (b) => {
-            await lunasiPesanan(db, pelaku, bayar.id, b.caraBayar, b.uangDiterima);
+            sedangBayar.current = true;
+            try {
+              await lunasiPesanan(db, pelaku, bayar.id, b.caraBayar, b.uangDiterima);
+            } finally {
+              sedangBayar.current = false;
+            }
             setBayar(null);
             const kabarLunas = `Pesanan #${bayar.nomor} lunas.`;
             lapor(kabarLunas, null);

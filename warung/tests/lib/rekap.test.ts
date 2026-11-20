@@ -162,7 +162,7 @@ describe('tutup kas dicek ulang dari catatan (R5)', () => {
   const sari = { uid: 'u2', nama: 'Sari' };
   // modal 100.000 + tunai 30.000 - laci 10.000 = 120.000 seharusnya; QRIS 23.000.
   const pesananS = [
-    buatPesanan({ id: 'p1', sesiKasId: 's5', total: 30000, caraBayar: 'tunai' }),
+    buatPesanan({ id: 'p1', sesiKasId: 's5', total: 30000, caraBayar: 'tunai', dilunasiOleh: pelaku, dilunasiPada: waktu }),
     buatPesanan({ id: 'p2', sesiKasId: 's5', total: 23000, caraBayar: 'qris' }),
     buatPesanan({ id: 'p3', sesiKasId: 's5', total: 99000, status: 'batal' }),
     buatPesanan({ id: 'lain', sesiKasId: 'sX', total: 50000, caraBayar: 'tunai' }),
@@ -189,7 +189,7 @@ describe('tutup kas dicek ulang dari catatan (R5)', () => {
     expect(out.map((o) => o.jenis).sort()).toEqual(['selisih_tunai', 'tutup_tidak_cocok']);
     expect(by.tutup_tidak_cocok).toEqual({
       jenis: 'tutup_tidak_cocok', waktu: tutup, refId: 's5',
-      pesan: 'Angka tutup kas 2026-11-20 tidak cocok dengan catatan pesanan (seharusnya Rp 120.000, tercatat Rp 100.000).',
+      pesan: 'Angka tutup kas 2026-11-20 tidak cocok dengan catatan pesanan (tunai seharusnya Rp 120.000, tercatat Rp 100.000).',
     });
     expect(by.selisih_tunai.pesan).toBe('Selisih tunai -Rp 20.000 di kas 2026-11-20 (ditutup Sari, tercatat Rp 0)');
   });
@@ -198,7 +198,7 @@ describe('tutup kas dicek ulang dari catatan (R5)', () => {
     const s = { ...sesiJujur, qrisAplikasi: 20000, qrisMerchant: 20000, selisihQris: 0 };
     const out = daftarPeringatan({ sesi: [s], pesanan: pesananS, pengeluaran: pengeluaranS });
     expect(out.map((o) => o.pesan).sort()).toEqual([
-      'Angka tutup kas 2026-11-20 tidak cocok dengan catatan pesanan (seharusnya Rp 23.000, tercatat Rp 20.000).',
+      'Angka tutup kas 2026-11-20 tidak cocok dengan catatan pesanan (QRIS seharusnya Rp 23.000, tercatat Rp 20.000).',
       'Selisih QRIS -Rp 3.000 di kas 2026-11-20 (ditutup Sari, tercatat Rp 0)',
     ]);
     expect(out.every((o) => o.refId === 's5' && o.waktu === tutup)).toBe(true);
@@ -215,6 +215,28 @@ describe('tutup kas dicek ulang dari catatan (R5)', () => {
     expect(out).toEqual([{
       jenis: 'tutup_tidak_cocok', waktu: tutup, refId: 's5', pesan: 'Kas 2026-11-20 ditutup dengan 2 pesanan belum bayar.',
     }]);
+  });
+
+  it('pembatalan sesudah kas ditutup tidak mengubah hitung ulang', () => {
+    const sesudah = new Date('2026-11-20T15:00:00Z');
+    const sebelum = new Date('2026-11-20T13:00:00Z');
+    const pesanan = [
+      // Paid tunai, cancelled by the owner after close: still counts as sold at close time.
+      { ...pesananS[0], status: 'batal' as const, dibatalkanOleh: pelaku, dibatalkanPada: sesudah, alasanBatal: 'koreksi' },
+      pesananS[1], pesananS[2],
+      // Unpaid at close, cancelled afterwards: it was still belum bayar when the drawer closed.
+      buatPesanan({ id: 'b9', sesiKasId: 's5', total: 8000, status: 'batal', caraBayar: null, dibatalkanOleh: pelaku, dibatalkanPada: sesudah, alasanBatal: 'x' }),
+      // Cancelled before close: excluded as usual.
+      buatPesanan({ id: 'b8', sesiKasId: 's5', total: 9000, status: 'batal', dibatalkanOleh: pelaku, dibatalkanPada: sebelum, alasanBatal: 'x' }),
+    ];
+    const pengeluaran = [
+      { ...pengeluaranS[0], status: 'batal' as const, dibatalkanOleh: pelaku, dibatalkanPada: sesudah, alasanBatal: 'x' },
+      pengeluaranS[1],
+    ];
+    const c = cekSesi(sesiJujur, pesanan, pengeluaran);
+    expect(c.tunaiSeharusnya).toBe(120000);
+    expect(c.qrisAplikasi).toBe(23000);
+    expect(c.jumlahBelumBayar).toBe(1);
   });
 
   it('sesi yang masih buka tidak dicek', () => {

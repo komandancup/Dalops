@@ -35,7 +35,7 @@ function unduhCSV(r: DataRekap, { dari, sampai }: Rentang) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000); // revoking at once can cancel the download in some browsers
 }
 
 function Isi({ r, rentang }: { r: DataRekap; rentang: Rentang }) {

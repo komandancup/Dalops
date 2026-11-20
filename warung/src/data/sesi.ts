@@ -16,7 +16,13 @@ async function ambilSesi(db: Firestore, id: string): Promise<SesiKas> {
   return dariDoc<SesiKas>(snap);
 }
 
-/** Opens a cash session. If one is already open, returns it instead of opening another. */
+export const GALAT_TANGGAL_HP = 'Tanggal di HP tidak sesuai. Atur tanggal & jam HP ke otomatis, lalu coba lagi.';
+
+/**
+ * Opens a cash session. If one is already open, returns it instead of opening another.
+ * The rules only accept a `tanggal` equal to the server's WIB date (±10 min), so a phone with a wrong
+ * date is refused; every other rule on this write is already checked here, hence the mapping below.
+ */
 export async function bukaSesi(
   db: Firestore, pelaku: Pelaku, modalAwal: number, alasanUbahModal: string | null,
 ): Promise<SesiKas> {
@@ -38,6 +44,9 @@ export async function bukaSesi(
     });
     tx.update(sesiAktifRef(db), { sesiKasId: ref.id });
     return ref.id;
+  }).catch((e: unknown) => {
+    if ((e as { code?: unknown })?.code === 'permission-denied') throw new Error(GALAT_TANGGAL_HP);
+    throw e;
   });
   return ambilSesi(db, id);
 }

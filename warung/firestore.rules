@@ -56,6 +56,18 @@ service cloud.firestore {
     function tanggalValid(t) {
       return t is string && t.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
     }
+    // tgl (YYYY-MM-DD) adalah tanggal kalender WIB (UTC+7) dari waktu t.
+    function tanggalWIBdari(tgl, t) {
+      let w = t + duration.value(7, 'h');
+      let p = tgl.split('-');
+      return int(p[0]) == w.year() && int(p[1]) == w.month() && int(p[2]) == w.day();
+    }
+    // Tanggal sesi harus hari ini menurut server (bukan jam HP), toleransi selisih jam 10 menit di sekitar tengah malam.
+    function tanggalHariIni(tgl) {
+      return tanggalValid(tgl)
+        && (tanggalWIBdari(tgl, request.time - duration.value(10, 'm'))
+          || tanggalWIBdari(tgl, request.time + duration.value(10, 'm')));
+    }
     function sesi(id) {
       return get(docPath('sesiKas', id));
     }
@@ -159,7 +171,7 @@ service cloud.firestore {
             'modalAwal', 'modalSaran', 'alasanUbahModal', 'ditutupOleh', 'ditutupPada',
             'tunaiSeharusnya', 'tunaiDihitung', 'selisihTunai', 'qrisAplikasi', 'qrisMerchant',
             'selisihQris', 'disetor', 'ditinggal', 'catatan'])
-          && tanggalValid(d.tanggal)
+          && tanggalHariIni(d.tanggal)
           && d.status == 'buka'
           && d.jumlahPesanan == 0
           && pelakuSaya(d.dibukaOleh)

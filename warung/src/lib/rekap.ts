@@ -110,10 +110,19 @@ export interface CekSesi {
  * so owner views recompute them from the session's pesanan/pengeluaran (other sessions are ignored).
  */
 export function cekSesi(sesi: SesiKas, pesanan: Pesanan[], pengeluaran: Pengeluaran[]): CekSesi {
+  // A cancellation made after the close (only the owner can) is undone here, so the recompute shows
+  // the state at close time: a paid order counts as lunas, an unpaid one as belum bayar.
+  const sesudahTutup = (d: Date | null) => !!d && !!sesi.ditutupPada && d.getTime() > sesi.ditutupPada.getTime();
   const r = ringkasSesi(
     sesi,
-    pesanan.filter((p) => p.sesiKasId === sesi.id),
-    pengeluaran.filter((e) => e.sesiKasId === sesi.id),
+    pesanan
+      .filter((p) => p.sesiKasId === sesi.id)
+      .map((p) => (p.status === 'batal' && sesudahTutup(p.dibatalkanPada)
+        ? { ...p, status: p.dilunasiPada ? ('lunas' as const) : ('belum_bayar' as const) }
+        : p)),
+    pengeluaran
+      .filter((e) => e.sesiKasId === sesi.id)
+      .map((e) => (e.status === 'batal' && sesudahTutup(e.dibatalkanPada) ? { ...e, status: 'aktif' as const } : e)),
   );
   const tunaiSeharusnyaTersimpan = sesi.tunaiSeharusnya ?? 0;
   const qrisAplikasiTersimpan = sesi.qrisAplikasi ?? 0;
@@ -165,13 +174,13 @@ export function daftarPeringatan(d: {
     if (s.ditutupOleh && s.ditutupPada) {
       const c = cekSesi(s, d.pesanan, d.pengeluaran);
       const dasar = { waktu: s.ditutupPada, refId: s.id };
-      const tidakCocok = (hitungUlang: number, tersimpan: number) => ({
+      const tidakCocok = (angka: 'tunai' | 'QRIS', hitungUlang: number, tersimpan: number) => ({
         ...dasar,
         jenis: 'tutup_tidak_cocok' as const,
-        pesan: `Angka tutup kas ${s.tanggal} tidak cocok dengan catatan pesanan (seharusnya ${formatRupiah(hitungUlang)}, tercatat ${formatRupiah(tersimpan)}).`,
+        pesan: `Angka tutup kas ${s.tanggal} tidak cocok dengan catatan pesanan (${angka} seharusnya ${formatRupiah(hitungUlang)}, tercatat ${formatRupiah(tersimpan)}).`,
       });
-      if (c.tunaiSeharusnya !== c.tunaiSeharusnyaTersimpan) out.push(tidakCocok(c.tunaiSeharusnya, c.tunaiSeharusnyaTersimpan));
-      if (c.qrisAplikasi !== c.qrisAplikasiTersimpan) out.push(tidakCocok(c.qrisAplikasi, c.qrisAplikasiTersimpan));
+      if (c.tunaiSeharusnya !== c.tunaiSeharusnyaTersimpan) out.push(tidakCocok('tunai', c.tunaiSeharusnya, c.tunaiSeharusnyaTersimpan));
+      if (c.qrisAplikasi !== c.qrisAplikasiTersimpan) out.push(tidakCocok('QRIS', c.qrisAplikasi, c.qrisAplikasiTersimpan));
       if (c.jumlahBelumBayar > 0) {
         out.push({
           ...dasar,

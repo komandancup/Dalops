@@ -26,6 +26,8 @@ export default function RiwayatKas({ pengguna, fokus }: { pengguna: Pengguna; fo
   });
   const periode = usePeriode(rentang.dari, rentang.sampai);
   const [kabar, setKabar] = useState<string | null>(null);
+  // Kept here, not in the list: the list unmounts while a refetch loads (e.g. after a koreksi).
+  const [terbuka, setTerbuka] = useState<string | null>(fokus?.id ?? null);
 
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-4 p-4 pt-0">
@@ -41,6 +43,8 @@ export default function RiwayatKas({ pengguna, fokus }: { pengguna: Pengguna; fo
           data={periode.data}
           pengguna={pengguna}
           fokusId={fokus?.id ?? null}
+          terbuka={terbuka}
+          onTerbuka={setTerbuka}
           onKoreksi={(teks) => {
             setKabar(teks);
             periode.muatUlang();
@@ -51,10 +55,10 @@ export default function RiwayatKas({ pengguna, fokus }: { pengguna: Pengguna; fo
   );
 }
 
-function Daftar({ data, pengguna, fokusId, onKoreksi }: {
-  data: Periode; pengguna: Pengguna; fokusId: string | null; onKoreksi(teks: string): void;
+function Daftar({ data, pengguna, fokusId, terbuka, onTerbuka: setTerbuka, onKoreksi }: {
+  data: Periode; pengguna: Pengguna; fokusId: string | null;
+  terbuka: string | null; onTerbuka(id: string | null): void; onKoreksi(teks: string): void;
 }) {
-  const [terbuka, setTerbuka] = useState<string | null>(fokusId);
   const [koreksiUntuk, setKoreksiUntuk] = useState<SesiKas | null>(null);
   const fokusRef = useRef<HTMLLIElement>(null);
   useEffect(() => {

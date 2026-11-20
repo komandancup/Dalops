@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, Timestamp, type Firestore } from 'firebase/firestore';
 import type { Menu } from '../../src/types';
-import { ambilPeriode, ambilSesiAktif, bukaSesi, pantauSesiAktif, tutupSesi } from '../../src/data/sesi';
+import { GALAT_TANGGAL_HP, ambilPeriode, ambilSesiAktif, bukaSesi, pantauSesiAktif, tutupSesi } from '../../src/data/sesi';
 import { batalkanPesanan, buatPesanan, catatCetak, lunasiPesanan } from '../../src/data/pesanan';
 import { batalkanPengeluaran, catatPengeluaran, pantauPengeluaranSesi } from '../../src/data/pengeluaran';
 import { tambahKoreksi } from '../../src/data/koreksi';
@@ -97,6 +97,16 @@ describe('alur shift', () => {
       disetor: 92000, ditinggal: 50000, ditutupOleh: BUDI,
     });
     expect(await ambilSesiAktif(d)).toEqual({ aktif: null, modalSaran: 50000 });
+  });
+
+  it('bukaSesi with a wrong phone date is refused with a friendly message', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.now() + 31 * 24 * 3600_000));
+    await expect(bukaSesi(db('budi'), BUDI, 100000, null)).rejects.toThrow(GALAT_TANGGAL_HP);
+    vi.useRealTimers();
+    expect((await ambilSesiAktif(db('budi'))).aktif).toBeNull();
+    const sesi = await bukaSesi(db('budi'), BUDI, 100000, null);
+    expect(sesi.tanggal).toBe(tanggalWIB(new Date()));
   });
 
   it('bukaSesi twice returns existing session', async () => {

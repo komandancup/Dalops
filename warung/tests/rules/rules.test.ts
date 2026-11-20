@@ -20,7 +20,12 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 
+import { tambahHari, tanggalWIB } from '../../src/lib/tanggal';
+
 let env: RulesTestEnvironment;
+
+/** Sessions are created through the rules, which require the server's WIB date. */
+const HARI = tanggalWIB(new Date());
 
 const OWNER = { uid: 'owner', nama: 'Pak Owner' };
 const BUDI = { uid: 'budi', nama: 'Budi' };
@@ -33,7 +38,7 @@ const item = [{ menuId: 'lele', nama: 'Pecel Lele', harga: 15000, jumlah: 2 }];
 
 function sesiBaru(pelaku = BUDI, extra: Record<string, unknown> = {}) {
   return {
-    tanggal: '2026-11-20', status: 'buka', jumlahPesanan: 0,
+    tanggal: HARI, status: 'buka', jumlahPesanan: 0,
     dibukaOleh: pelaku, dibukaPada: serverTimestamp(), modalAwal: 50000, modalSaran: 50000, alasanUbahModal: null,
     ditutupOleh: null, ditutupPada: null, tunaiSeharusnya: null, tunaiDihitung: null, selisihTunai: null,
     qrisAplikasi: null, qrisMerchant: null, selisihQris: null, disetor: null, ditinggal: null, catatan: null,
@@ -43,7 +48,7 @@ function sesiBaru(pelaku = BUDI, extra: Record<string, unknown> = {}) {
 
 function pesananBaru(nomor: number, pelaku = BUDI, extra: Record<string, unknown> = {}) {
   return {
-    sesiKasId: 's1', tanggal: '2026-11-20', nomor, label: 'Meja 1', catatan: '',
+    sesiKasId: 's1', tanggal: HARI, nomor, label: 'Meja 1', catatan: '',
     item, total: 30000, status: 'belum_bayar', caraBayar: null, uangDiterima: null, jumlahCetak: 0,
     dibuatOleh: pelaku, dibuatPada: serverTimestamp(), dilunasiOleh: null, dilunasiPada: null,
     dibatalkanOleh: null, dibatalkanPada: null, alasanBatal: null,
@@ -53,7 +58,7 @@ function pesananBaru(nomor: number, pelaku = BUDI, extra: Record<string, unknown
 
 function pengeluaranBaru(sesiKasId: string | null, pelaku = BUDI, extra: Record<string, unknown> = {}) {
   return {
-    sesiKasId, tanggal: '2026-11-20', kategori: 'Gas', keterangan: 'Gas 3kg', nominal: 22000, dariLaci: true,
+    sesiKasId, tanggal: HARI, kategori: 'Gas', keterangan: 'Gas 3kg', nominal: 22000, dariLaci: true,
     status: 'aktif', dibuatOleh: pelaku, dibuatPada: serverTimestamp(),
     dibatalkanOleh: null, dibatalkanPada: null, alasanBatal: null,
     ...extra,
@@ -131,6 +136,32 @@ describe('sesi kas', () => {
     b.set(doc(d, 'sesiKas', 's1'), sesiBaru());
     b.update(doc(d, 'pengaturan', 'sesiAktif'), { sesiKasId: 's1' });
     await assertSucceeds(b.commit());
+  });
+
+  it('session tanggal must be the WIB date of the server clock (±10 minutes)', async () => {
+    const d = db('budi');
+    const buka = (tanggal: string) => {
+      const b = writeBatch(d);
+      b.set(doc(d, 'sesiKas', 's1'), sesiBaru(BUDI, { tanggal }));
+      b.update(doc(d, 'pengaturan', 'sesiAktif'), { sesiKasId: 's1' });
+      return b.commit();
+    };
+    await assertFails(buka(tambahHari(HARI, 30)));
+    await assertFails(buka(tambahHari(HARI, -30)));
+    await assertFails(buka('2026-13-45'));
+    await assertSucceeds(buka(HARI));
+  });
+
+  it('a phone date within the skew window is accepted (WIB date of now ± 9 minutes)', async () => {
+    const d = db('budi');
+    for (const geser of [-9, 9]) {
+      await seed('pengaturan/sesiAktif', { sesiKasId: null, ditinggalTerakhir: 50000 });
+      const id = `s${geser}`;
+      const b = writeBatch(d);
+      b.set(doc(d, 'sesiKas', id), sesiBaru(BUDI, { tanggal: tanggalWIB(new Date(Date.now() + geser * 60_000)) }));
+      b.update(doc(d, 'pengaturan', 'sesiAktif'), { sesiKasId: id });
+      await assertSucceeds(b.commit());
+    }
   });
 
   it('opening without updating sesiAktif is denied', async () => {
@@ -416,7 +447,7 @@ describe('append-only and roles', () => {
     await seedSesiBuka(1);
     await seed('pesanan/p1', pesananBaru(1));
     await seed('pengeluaran/e1', pengeluaranBaru('s1'));
-    await seed('koreksi/k1', { sesiKasId: 's1', tanggal: '2026-11-20', nominal: 0, catatan: 'cek', dibuatOleh: OWNER, dibuatPada: 'x' });
+    await seed('koreksi/k1', { sesiKasId: 's1', tanggal: HARI, nominal: 0, catatan: 'cek', dibuatOleh: OWNER, dibuatPada: 'x' });
     for (const uid of ['owner', 'budi']) {
       const d = db(uid);
       await assertFails(deleteDoc(doc(d, 'pesanan', 'p1')));
@@ -430,7 +461,7 @@ describe('append-only and roles', () => {
     await seedSesiTutup();
     const d = db('owner');
     await assertSucceeds(setDoc(doc(d, 'koreksi', 'k1'), {
-      sesiKasId: 's1', tanggal: '2026-11-20', nominal: -5000, catatan: 'Uang terselip', dibuatOleh: OWNER, dibuatPada: serverTimestamp(),
+      sesiKasId: 's1', tanggal: HARI, nominal: -5000, catatan: 'Uang terselip', dibuatOleh: OWNER, dibuatPada: serverTimestamp(),
     }));
     await assertFails(updateDoc(doc(d, 'koreksi', 'k1'), { nominal: 0 }));
   });
@@ -443,7 +474,7 @@ describe('append-only and roles', () => {
     await assertFails(setDoc(doc(d, 'users', 'baru'), { nama: 'X', username: 'x', peran: 'karyawan', aktif: true }));
     await assertFails(setDoc(doc(d, 'pengaturan', 'warung'), { namaWarung: 'X', qrisStatis: null, namaMerchant: null }));
     await assertFails(setDoc(doc(d, 'koreksi', 'k1'), {
-      sesiKasId: 's1', tanggal: '2026-11-20', nominal: 0, catatan: 'x', dibuatOleh: BUDI, dibuatPada: serverTimestamp(),
+      sesiKasId: 's1', tanggal: HARI, nominal: 0, catatan: 'x', dibuatOleh: BUDI, dibuatPada: serverTimestamp(),
     }));
   });
 

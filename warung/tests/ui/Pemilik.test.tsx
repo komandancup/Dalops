@@ -102,10 +102,11 @@ describe('RiwayatKas', () => {
     expect(screen.getByText('-Rp 2.000 · uang sobek')).toBeTruthy();
   });
 
-  it('adds a negative koreksi with a required note, then fetches again', async () => {
+  it('adds a negative koreksi with a required note, then fetches again keeping the session expanded', async () => {
     const user = userEvent.setup();
-    render(<RiwayatKas pengguna={pemilik} fokus={{ id: 's1', tanggal: '2026-11-19' }} />);
-    await user.click(await screen.findByRole('button', { name: 'Tambah catatan koreksi' }));
+    render(<RiwayatKas pengguna={pemilik} />);
+    await user.click(await screen.findByRole('button', { name: /Kas 2026-11-19/ }));
+    await user.click(screen.getByRole('button', { name: 'Tambah catatan koreksi' }));
     const dialog = screen.getByRole('dialog', { name: 'Koreksi kas 2026-11-19' });
     const simpan = within(dialog).getByRole('button', { name: 'Simpan Koreksi' });
     expect(simpan).toHaveProperty('disabled', true);
@@ -114,10 +115,15 @@ describe('RiwayatKas', () => {
     await user.clear(nominal);
     await user.type(nominal, '5000');
     await user.type(within(dialog).getByLabelText('Catatan'), 'uang palsu');
+    // A real refetch takes a while: the list shows Memuat… in between and is mounted again.
+    m.ambilPeriode.mockImplementation(() => new Promise((ok) => setTimeout(() => ok(data), 20)));
     await user.click(simpan);
+    expect(await screen.findByText('Memuat…')).toBeTruthy();
     expect(m.tambahKoreksi).toHaveBeenCalledWith({}, { uid: 'o1', nama: 'Pak Haji' }, 's1', -5000, 'uang palsu');
     expect(await screen.findByText('Koreksi -Rp 5.000 untuk kas 2026-11-19 tersimpan.')).toBeTruthy();
     expect(m.ambilPeriode).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole('button', { name: 'Tambah catatan koreksi' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Kas 2026-11-19/ }).getAttribute('aria-expanded')).toBe('true');
   });
 
   it('allows a zero koreksi', async () => {
@@ -161,6 +167,7 @@ describe('Rekap', () => {
     await user.click(await screen.findByRole('button', { name: 'Unduh CSV' }));
     expect(unduhan).toBe(`rekap-${dari}-${dari}.csv`);
     expect(buat).toHaveBeenCalledOnce();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled(); // deferred so the download can start
     klik.mockRestore();
   });
 

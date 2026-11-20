@@ -106,7 +106,7 @@ describe('Beranda', () => {
     data.sesi = [tutup, buka];
     render(<Beranda sesi={buka} onBuka={onBuka} />);
     // Recomputed: modal 100.000 + tunai 99.000 = 199.000, the phone wrote 100.000.
-    const pesan = 'Angka tutup kas 2026-11-19 tidak cocok dengan catatan pesanan (seharusnya Rp 199.000, tercatat Rp 100.000).';
+    const pesan = 'Angka tutup kas 2026-11-19 tidak cocok dengan catatan pesanan (tunai seharusnya Rp 199.000, tercatat Rp 100.000).';
     await user.click((await screen.findByText(pesan)).closest('button')!);
     expect(onBuka).toHaveBeenCalledWith({ halaman: 'riwayat', fokus: { id: 's0', tanggal: '2026-11-19' } });
     await user.click(screen.getByRole('button', { name: /Pesanan #3/ }));

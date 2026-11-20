@@ -119,6 +119,8 @@ Buka WARUNG_URL di browser HP atau komputer, lalu masuk dengan username dan kata
 2. **Lainnya → Kelola Menu**: tambahkan semua menu beserta harga dan kategorinya.
 3. **Lainnya → Karyawan**: buat akun untuk tiap karyawan (username + kata sandi). Berikan username dan kata sandinya ke karyawan. Karyawan yang berhenti cukup dinonaktifkan; dia tidak bisa masuk lagi.
 
+Secara rutin (misalnya seminggu sekali), cocokkan angka QRIS di **Lainnya → Riwayat Kas** dengan aplikasi merchant QRIS atau mutasi rekening bank. Angka QRIS saat tutup kas diketik karyawan, jadi hanya Anda yang bisa memastikan uangnya benar-benar masuk.
+
 ## 7. Buat aplikasi Android (APK) dan kirim ke karyawan
 
 Aplikasi Android ini hanya "jendela" yang membuka WARUNG_URL, ditambah kemampuan mencetak ke printer Bluetooth. Jadi menu, harga, dan data selalu sama dengan versi web. APK hanya perlu dibuat ulang kalau WARUNG_URL berubah.

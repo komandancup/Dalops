@@ -14,7 +14,7 @@ import { usePantau } from './usePantau';
 
 interface Hasil { sesiId: string; disetor: number; ditinggal: number }
 
-/** Close-session screen for the open session; after closing it shows what to hand over. */
+/** Close-session screen for the open session (blind count first); after closing it shows what to hand over. */
 export default function TutupKas({ pengguna, sesi }: { pengguna: Pengguna; sesi: SesiKas | null }) {
   const [hasil, setHasil] = useState<Hasil | null>(null);
 
@@ -65,6 +65,8 @@ function FormTutup({ pengguna, sesi, onSelesai }: { pengguna: Pengguna; sesi: Se
   if (!pesanan.data || !pengeluaran.data) return <LayarMemuat />;
 
   const r = ringkasSesi(sesi, pesanan.data, pengeluaran.data);
+  // Blind count: the expected figures stay hidden until both counts are typed, so nobody copies the target.
+  const sudahDihitung = dihitung !== null && qris !== null;
   const disetor = disetorDiubah !== undefined
     ? disetorDiubah
     : dihitung === null || ditinggal === null ? null : Math.max(0, dihitung - ditinggal);
@@ -102,26 +104,33 @@ function FormTutup({ pengguna, sesi, onSelesai }: { pengguna: Pengguna; sesi: Se
     <div className="mx-auto flex max-w-lg flex-col gap-5 p-4">
       <h2 className="text-2xl font-bold text-stone-900">Tutup Kas</h2>
 
-      <section className="rounded-xl border border-stone-200 bg-white p-3">
-        <Baris label="Modal awal" nilai={formatRupiah(sesi.modalAwal)} />
-        <Baris label="Penjualan tunai" nilai={`+ ${formatRupiah(r.penjualanTunai)}`} />
-        <Baris label="Pengeluaran dari laci" nilai={`− ${formatRupiah(r.pengeluaranLaci)}`} />
-        <div className="mt-1 border-t border-stone-200 pt-1">
-          <Baris label="Uang tunai seharusnya" nilai={formatRupiah(r.tunaiSeharusnya)} tebal />
-        </div>
-      </section>
-
       <div className="flex flex-col gap-2">
         <InputRupiah label="Uang tunai dihitung" value={dihitung} onChange={setDihitung}
-          keterangan="Hitung semua uang di laci sekarang." />
-        {dihitung !== null && <Selisih nilai={dihitung - r.tunaiSeharusnya} />}
+          keterangan="Hitung semua uang di laci sekarang. Angka seharusnya muncul setelah uang tunai dan QRIS diisi." />
+        {sudahDihitung && <Selisih nilai={dihitung - r.tunaiSeharusnya} />}
       </div>
 
       <div className="flex flex-col gap-2">
         <InputRupiah label="Total QRIS di aplikasi merchant" value={qris} onChange={setQris}
-          keterangan={`Menurut aplikasi ini: ${formatRupiah(r.penjualanQris)}`} />
-        {qris !== null && <Selisih nilai={qris - r.penjualanQris} />}
+          keterangan="Lihat total QRIS hari ini di aplikasi merchant. Tulis 0 kalau tidak ada." />
+        {sudahDihitung && (
+          <>
+            <p className="text-base text-stone-800">Menurut aplikasi ini: {formatRupiah(r.penjualanQris)}</p>
+            <Selisih nilai={qris - r.penjualanQris} />
+          </>
+        )}
       </div>
+
+      {sudahDihitung && (
+        <section className="rounded-xl border border-stone-200 bg-white p-3">
+          <Baris label="Modal awal" nilai={formatRupiah(sesi.modalAwal)} />
+          <Baris label="Penjualan tunai" nilai={`+ ${formatRupiah(r.penjualanTunai)}`} />
+          <Baris label="Pengeluaran dari laci" nilai={`− ${formatRupiah(r.pengeluaranLaci)}`} />
+          <div className="mt-1 border-t border-stone-200 pt-1">
+            <Baris label="Uang tunai seharusnya" nilai={formatRupiah(r.tunaiSeharusnya)} tebal />
+          </div>
+        </section>
+      )}
 
       <div className="grid grid-cols-1 gap-4 min-[400px]:grid-cols-2">
         <InputRupiah label="Disetor ke pemilik" value={disetor} onChange={setDisetorDiubah} />

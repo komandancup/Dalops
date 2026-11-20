@@ -56,20 +56,33 @@ const nilai = (label: string) => (screen.getByLabelText(label) as HTMLInputEleme
 const tombolTutup = () => screen.getByRole('button', { name: 'Tutup Kas' });
 
 describe('TutupKas', () => {
-  it('shows the summary, live selisih, keeps Tutup Kas disabled until valid, then closes with integers', async () => {
+  it('blind count: hides the expected figures until both counts are entered, then shows them with the selisih', async () => {
     const user = userEvent.setup();
     render(<TutupKas pengguna={pengguna} sesi={sesi} />);
+    // Nothing that gives away the target before counting.
+    for (const t of ['Uang tunai seharusnya', 'Modal awal', 'Penjualan tunai', 'Pengeluaran dari laci']) {
+      expect(screen.queryByText(t)).toBeNull();
+    }
+    expect(screen.queryByText(/Rp 112\.000/)).toBeNull();
+    expect(screen.queryByText(/Menurut aplikasi ini/)).toBeNull();
+    expect(screen.getByText('Hitung semua uang di laci sekarang. Angka seharusnya muncul setelah uang tunai dan QRIS diisi.')).toBeTruthy();
+    expect(screen.getByText('Lihat total QRIS hari ini di aplikasi merchant. Tulis 0 kalau tidak ada.')).toBeTruthy();
+    expect(tombolTutup()).toHaveProperty('disabled', true);
+
+    await user.type(screen.getByLabelText('Uang tunai dihitung'), '110.000');
+    // Still hidden with only the cash entered.
+    expect(screen.queryByText('Uang tunai seharusnya')).toBeNull();
+    expect(screen.queryByText(/Selisih/)).toBeNull();
+    expect(screen.queryByText(/Uang tunai selisih/)).toBeNull();
+
+    await user.type(screen.getByLabelText('Total QRIS di aplikasi merchant'), '15000');
     expect(screen.getByText('Uang tunai seharusnya').parentElement?.textContent).toContain('Rp 112.000');
     expect(screen.getByText('Modal awal').parentElement?.textContent).toContain('Rp 100.000');
     expect(screen.getByText('Penjualan tunai').parentElement?.textContent).toContain('Rp 22.000');
     expect(screen.getByText('Pengeluaran dari laci').parentElement?.textContent).toContain('Rp 10.000');
-    expect(tombolTutup()).toHaveProperty('disabled', true);
-
-    await user.type(screen.getByLabelText('Uang tunai dihitung'), '110.000');
     const selisih = screen.getByText('Selisih -Rp 2.000');
     expect(selisih.className).toContain('text-red');
     expect(screen.getByText('Menurut aplikasi ini: Rp 15.000')).toBeTruthy();
-    await user.type(screen.getByLabelText('Total QRIS di aplikasi merchant'), '15000');
     expect(screen.getByText('Selisih Rp 0').className).not.toContain('text-red');
 
     // ditinggal prefilled with the session's modal awal, disetor follows dihitung − ditinggal

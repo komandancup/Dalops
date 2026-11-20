@@ -50,8 +50,12 @@ test('satu shift penuh: buka kas, jualan tunai + QRIS, tutup kas, pemilik meliha
 
   // Close: counted 134.000, QRIS 18.000, hand over 84.000, leave 50.000.
   await tab(page, 'Tutup Kas').click();
+  // Blind count: the expected cash is shown only after both counts are typed.
+  await expect(page.getByLabel('Uang tunai dihitung')).toBeVisible();
+  await expect(page.getByText('Uang tunai seharusnya')).toHaveCount(0);
   await page.getByLabel('Uang tunai dihitung').fill('134000');
   await page.getByLabel('Total QRIS di aplikasi merchant').fill('18000');
+  await expect(page.getByText('Uang tunai seharusnya').locator('..')).toContainText('Rp 134.000');
   await page.getByLabel('Ditinggal di laci').fill('50000');
   await page.getByLabel('Disetor ke pemilik').fill('84000');
   await page.getByRole('main').getByRole('button', { name: 'Tutup Kas' }).click();

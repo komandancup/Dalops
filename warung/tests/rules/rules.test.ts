@@ -459,6 +459,37 @@ describe('pesanan', () => {
   });
 });
 
+describe('text length caps', () => {
+  const panjang = (n: number) => 'x'.repeat(n);
+
+  it('pesanan label and catatan are at most 200 characters', async () => {
+    await seedSesiBuka();
+    const d = db('budi');
+    await assertFails(buatPesananBatch(d, 'p1', 1, pesananBaru(1, BUDI, { label: panjang(201) })));
+    await assertFails(buatPesananBatch(d, 'p1', 1, pesananBaru(1, BUDI, { catatan: panjang(201) })));
+    await assertSucceeds(buatPesananBatch(d, 'p1', 1, pesananBaru(1, BUDI, { label: panjang(200), catatan: panjang(200) })));
+  });
+
+  it('pengeluaran keterangan is at most 200 characters', async () => {
+    await seedSesiBuka();
+    const d = db('budi');
+    await assertFails(setDoc(doc(d, 'pengeluaran', 'e1'), pengeluaranBaru('s1', BUDI, { keterangan: panjang(201) })));
+    await assertSucceeds(setDoc(doc(d, 'pengeluaran', 'e1'), pengeluaranBaru('s1', BUDI, { keterangan: panjang(200) })));
+  });
+
+  it('alasanBatal is at most 200 characters for pesanan and pengeluaran', async () => {
+    await seedSesiBuka(1);
+    await seed('pesanan/p1', pesananBaru(1));
+    await seed('pengeluaran/e1', pengeluaranBaru('s1'));
+    const d = db('budi');
+    const batal = (alasanBatal: string) => ({ status: 'batal', alasanBatal, dibatalkanOleh: BUDI, dibatalkanPada: serverTimestamp() });
+    await assertFails(updateDoc(doc(d, 'pesanan', 'p1'), batal(panjang(201))));
+    await assertFails(updateDoc(doc(d, 'pengeluaran', 'e1'), batal(panjang(201))));
+    await assertSucceeds(updateDoc(doc(d, 'pesanan', 'p1'), batal(panjang(200))));
+    await assertSucceeds(updateDoc(doc(d, 'pengeluaran', 'e1'), batal(panjang(200))));
+  });
+});
+
 describe('pengeluaran', () => {
   it('karyawan can create pengeluaran in open session; not in closed', async () => {
     await seedSesiBuka();

@@ -136,6 +136,7 @@ describe('DaftarPesanan', () => {
     m.batalkanPesanan.mockRejectedValueOnce(new Error('Tulis alasan pembatalan.'));
     await user.click(within(items[1]).getByRole('button', { name: 'Batalkan' }));
     const dialog = screen.getByRole('dialog', { name: 'Batalkan Pesanan #1' });
+    expect(within(dialog).getByLabelText('Alasan pembatalan').getAttribute('maxlength')).toBe('200'); // rules cap
     const tombol = within(dialog).getByRole('button', { name: 'Batalkan Pesanan' });
     expect(tombol).toHaveProperty('disabled', true);
     await user.type(within(dialog).getByLabelText('Alasan pembatalan'), '  pembeli pergi ');

@@ -49,6 +49,10 @@ service cloud.firestore {
     function teksWajib(s) {
       return s is string && s.trim().size() > 0;
     }
+    // Teks bebas dari karyawan dibatasi panjangnya.
+    function teksPendek(s) {
+      return s is string && s.size() <= 200;
+    }
     function rupiah(n) {
       return n is int;
     }
@@ -81,7 +85,7 @@ service cloud.firestore {
     }
     function batalValid(d) {
       return d.status == 'batal'
-        && teksWajib(d.alasanBatal)
+        && teksWajib(d.alasanBatal) && teksPendek(d.alasanBatal)
         && pelakuSaya(d.dibatalkanOleh)
         && d.dibatalkanPada == request.time;
     }
@@ -265,8 +269,8 @@ service cloud.firestore {
           && d.nomor == sesudah.jumlahPesanan
           && sesudah.pesananTerakhir == id
           && d.tanggal == sebelum.tanggal
-          && d.label is string
-          && d.catatan is string
+          && teksPendek(d.label)
+          && teksPendek(d.catatan)
           && d.item is list && d.item.size() > 0 && d.item.size() <= 30
           // Aturan tidak bisa mengulang daftar: baris pertama dicek di sini, sisanya dijumlah ulang di
           // peringatan pemilik (pesanan_tidak_wajar). Pesanan satu baris harus pas total = harga × jumlah.
@@ -322,7 +326,7 @@ service cloud.firestore {
         return kunciPersis(d, ['sesiKasId', 'tanggal', 'kategori', 'keterangan', 'nominal', 'dariLaci',
             'status', 'dibuatOleh', 'dibuatPada', 'dibatalkanOleh', 'dibatalkanPada', 'alasanBatal'])
           && d.kategori in ['Bahan baku', 'Minyak', 'Gas', 'Beras', 'Kemasan', 'Operasional lain']
-          && d.keterangan is string
+          && teksPendek(d.keterangan)
           && rupiahPositif(d.nominal)
           && d.dariLaci is bool
           && d.status == 'aktif'

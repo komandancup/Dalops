@@ -39,7 +39,7 @@ export default function Batalkan({ judul, children, tombol, onBatalkan, onTutup 
         <div className="text-lg text-stone-800">{children}</div>
         <div className="flex flex-col gap-1">
           <label htmlFor={id} className="text-base font-medium text-stone-800">Alasan pembatalan</label>
-          <textarea id={id} value={alasan} onChange={(e) => setAlasan(e.target.value)} rows={2}
+          <textarea id={id} value={alasan} onChange={(e) => setAlasan(e.target.value)} rows={2} maxLength={200}
             placeholder="mis. pembeli tidak jadi"
             className="rounded-xl border-2 border-stone-300 bg-white px-3 py-2 text-lg outline-none focus:border-orange-700" />
           <p className="text-sm text-stone-700">Wajib diisi. Pemilik bisa melihat alasan ini.</p>

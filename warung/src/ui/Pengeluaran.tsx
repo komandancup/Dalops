@@ -134,7 +134,7 @@ export function FormPengeluaran({ pelaku, sesiKasId, onTersimpan }: PropsForm) {
 
       <div className="flex flex-col gap-1">
         <label htmlFor={idKeterangan} className="text-base font-medium text-stone-800">Keterangan</label>
-        <input id={idKeterangan} value={keterangan} onChange={(e) => setKeterangan(e.target.value)} placeholder="mis. lele 5 kg"
+        <input id={idKeterangan} value={keterangan} onChange={(e) => setKeterangan(e.target.value)} maxLength={200} placeholder="mis. lele 5 kg"
           className="min-h-12 rounded-xl border-2 border-stone-300 bg-white px-3 text-lg outline-none focus:border-orange-700" />
       </div>
 

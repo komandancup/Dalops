@@ -168,12 +168,12 @@ export default function Kasir({ pengguna, sesi, namaWarung }: Props) {
           <div className="mb-4 flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-base font-medium text-stone-800">
               Label
-              <input value={k.label} onChange={(e) => k.setLabel(e.target.value)} placeholder="mis. Meja 3, Bungkus Pak Budi"
+              <input value={k.label} onChange={(e) => k.setLabel(e.target.value)} maxLength={200} placeholder="mis. Meja 3, Bungkus Pak Budi"
                 className="min-h-12 rounded-xl border-2 border-stone-300 bg-white px-3 text-lg font-normal outline-none focus:border-orange-700" />
             </label>
             <label className="flex flex-col gap-1 text-base font-medium text-stone-800">
               Catatan
-              <textarea value={k.catatan} onChange={(e) => k.setCatatan(e.target.value)} rows={2} placeholder="mis. sambal dipisah"
+              <textarea value={k.catatan} onChange={(e) => k.setCatatan(e.target.value)} rows={2} maxLength={200} placeholder="mis. sambal dipisah"
                 className="rounded-xl border-2 border-stone-300 bg-white px-3 py-2 text-lg font-normal outline-none focus:border-orange-700" />
             </label>
           </div>

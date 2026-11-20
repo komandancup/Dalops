@@ -170,6 +170,7 @@ Di browser biasa (bukan aplikasi Android), Bluetooth tidak bisa dipakai; struk d
 | "Printer tidak tersambung. Cek Bluetooth dan printer." | Pastikan printer menyala, kertas ada, Bluetooth HP menyala, dan printer sudah dipasangkan di Pengaturan Bluetooth HP. Pesanan tetap tersimpan walau struk gagal dicetak; cetak lagi dari menu Pesanan. |
 | Printer tidak muncul di daftar | Pasangkan dulu di Pengaturan Bluetooth HP, lalu ketuk **Cari printer lagi**. |
 | Tidak bisa membuat akun karyawan | Periksa `FIREBASE_SERVICE_ACCOUNT` di Vercel (harus seluruh isi file kunci), lalu Redeploy. |
+| Saat buka kas muncul "Tanggal di HP tidak sesuai…" padahal tanggal & jam HP sudah benar | Aturan keamanan database mungkin belum terpasang atau masih versi lama. Ulangi langkah 2: jalankan `firebase deploy --only firestore:rules` di folder `warung`. |
 | Aplikasi Android tidak membuka apa-apa | WARUNG_URL salah atau belum diisi saat membuat APK. Perbaiki lalu buat APK lagi (langkah 7). |
 
 ## Untuk pengembang

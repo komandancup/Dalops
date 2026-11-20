@@ -1,0 +1,40 @@
+{
+  "name": "warung",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit",
+    "test": "vitest run tests/lib tests/api",
+    "test:emu": "firebase emulators:exec --only auth,firestore \"vitest run tests/rules tests/data\""
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@tailwindcss/vite": "^4.1.14",
+    "@vitejs/plugin-react": "^5.0.4",
+    "firebase": "^12.13.0",
+    "firebase-admin": "^14.5.1",
+    "jsqr": "^1.4.0",
+    "lucide-react": "^0.546.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^6.2.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.3.4",
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@types/node": "^22.14.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "firebase-tools": "^15.37.0",
+    "tailwindcss": "^4.1.14",
+    "typescript": "~5.8.2",
+    "vitest": "^5.1.1"
+  }
+}

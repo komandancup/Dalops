@@ -1,0 +1,18 @@
+# 20 Christmas Illustrations for Adobe Stock
+
+Original vector illustrations (made from code, **not AI-generated**). They are ready to upload to Adobe Stock Contributor.
+
+## Contents
+- `jpg/`: 20 files ready to upload (18 at 6000×4000 px, 2 square patterns at 4800×4800 px). Adobe's minimum is 4 MP.
+- `svg/`: vector source files. Open them in Illustrator or Inkscape and save as **EPS 10** to submit them as *Vectors* (vectors are usually priced higher).
+- `adobe_stock_metadata.csv`: title, keywords (30 per image, most important first) and category, for a bulk import.
+- `generate.py` + `render.cjs`: scripts to regenerate the images or change colours (`python3 generate.py && node render.cjs 4 jpg`).
+
+## How to upload
+1. contributor.stock.adobe.com, then **Upload**, then drag in all the files from `jpg/`.
+2. Open the **Upload CSV** menu and pick `adobe_stock_metadata.csv`. Titles and keywords fill in automatically.
+3. File type: **Illustrations**. Answer **No** to "Created using generative AI tools".
+4. Check each file, then **Submit**.
+
+## Upload timing
+Adobe's review takes from a few days up to 2 weeks. Christmas buyers (agencies and designers) start searching in **September–October**. Images submitted now will catch the last-minute December demand and will be fully indexed for the 2027 season.

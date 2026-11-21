@@ -24,3 +24,12 @@ Folder `vector/upload/` is **ready to upload**: 19 EPS files + 1 JPG (`christmas
 - Upload **only one format per design** (EPS *or* JPG). Uploading both usually gets rejected as similar content.
 - When uploading, set the file type to **Vectors** (or **Illustrations** for #10) and answer **No** to generative AI.
 - Regenerate: `python3 vectorize.py` (needs `pip install cairosvg fonttools lxml`).
+
+## Automated upload (manual login)
+On your own computer, in Claude Code, type `/adobe-stock-upload`, or run it directly:
+```bash
+npm i -D playwright && npx playwright install chromium   # once
+node christmas-stock/upload/adobe-upload.cjs --check       # validate files + CSV
+node christmas-stock/upload/adobe-upload.cjs               # open the browser → log in → automatic upload
+```
+The script uploads the files and the CSV, then stops before **Submit**. Next time you won't need to log in again (the session is stored in `~/.adobe-stock-profile`).

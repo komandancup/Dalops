@@ -16,3 +16,11 @@ Original vector illustrations (made from code, **not AI-generated**). They are r
 
 ## Upload timing
 Adobe's review takes from a few days up to 2 weeks. Christmas buyers (agencies and designers) start searching in **September–October**. Images submitted now will catch the last-minute December demand and will be fully indexed for the 2027 season.
+
+## Vector version (EPS), recommended
+Folder `vector/upload/` is **ready to upload**: 19 EPS files + 1 JPG (`christmas_10_gold_bokeh`, because the bokeh effect needs blur, which is not allowed in Adobe vectors) + `adobe_stock_metadata_upload.csv`.
+- Each EPS is clean: no transparency, no blur effects, no raster images, and all text is converted to outlines. Artboard is 6000×4000 pt.
+- `vector/preview/` holds JPG previews of each EPS, for checking only and **not for upload**.
+- Upload **only one format per design** (EPS *or* JPG). Uploading both usually gets rejected as similar content.
+- When uploading, set the file type to **Vectors** (or **Illustrations** for #10) and answer **No** to generative AI.
+- Regenerate: `python3 vectorize.py` (needs `pip install cairosvg fonttools lxml`).
